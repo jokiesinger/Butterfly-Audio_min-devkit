@@ -4,6 +4,6 @@
 [submodule "source/min-lib"]
 	path = source/min-lib
 	url = https://github.com/Cycling74/min-lib.git
-[submodule "bfa-lib"]
-	path = bfa-lib
+[submodule "submodules/bfa-lib"]
+	path = submodules/bfa-lib
 	url = git@github.com:Butterfly-Audio/Butterfly_Audio_Library.git
