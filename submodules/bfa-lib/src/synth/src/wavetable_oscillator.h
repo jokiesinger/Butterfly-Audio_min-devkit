@@ -246,6 +246,4 @@ private:
 	T param{};
 	WavetableOscillator osc1, osc2;
 };
-
 }
-&

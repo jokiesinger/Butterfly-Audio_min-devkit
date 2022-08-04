@@ -3,11 +3,13 @@
 /// @copyright    Copyright 2018 The Min-DevKit Authors. All rights reserved.
 /// @license    Use of this source code is governed by the MIT License found in the License.md file.
 
+
 #include "c74_min.h"
 #include "../../../submodules/bfa-lib/src/wave/src/antialiase.h"
 #include "../../../submodules/bfa-lib/src/wave/src/waveform_processing.h"
 #include "../../../submodules/bfa-lib/src/synth/src/wavetable_oscillator.h"
 
+//using namespace Butterfly;
 using namespace c74::min;
 using namespace c74::min::ui;
 
@@ -16,7 +18,7 @@ struct Frame
     bool is_empty{true};
     bool is_selected{false};
     std::vector<float> samples;
-    unsigned int position;
+    unsigned int position{};
 };
 
 struct MorphableFrame
@@ -42,7 +44,7 @@ public:
     outlet<> message_out     { this, "(message) Messages out."};
     outlet<> signal_out      { this, "(signal) Synthesized wavetable signal out."};
             
-    stacked_tables(const atoms& args = {}) : ui_operator::ui_operator {this, args}, tables{4} {}
+    stacked_tables(const atoms& args = {}) : ui_operator::ui_operator {this, args}{}
     
     buffer_reference input_buffer { this,                   //Constructor of buffer reference before input_buffer_name attribute
         MIN_FUNCTION {                                  // will receive a symbol arg indicating 'binding', 'unbinding', or 'modified'
@@ -124,7 +126,7 @@ public:
                 {
                     for (auto i = 0; i < buf.frame_count(); i++)                //Get samples
                     {
-                        frames[current_pos].samples.push_back(buf.lookup(i, chan));
+                        frames[current_pos].samples.push_back(buf.lookup(i, chan));     //Das ist nicht gut. Vector erst resizen und dann über Index.
                     }
                 }
                 unselect_all();
@@ -132,6 +134,8 @@ public:
                 frames[current_pos].is_selected = true;
                 frames[current_pos].position = current_pos;
                 selected_frame = current_pos;
+                
+                create_table_from_frame(current_pos);
                 
                 nactive_frames++;
                 redraw();
@@ -224,9 +228,9 @@ public:
         {
             float pos = args[0];
             float position = pos * (nactive_frames - 1);
-            morphable_frame.samples.clear();
+            morphable_frame.samples.clear();                //clearen und neu pushbacken = Katastrophe!
             
-            if(nactive_frames == 0 || nactive_frames == 1)
+            if (nactive_frames == 0 || nactive_frames == 1)
             {
                 morphable_frame.is_visible = false;
             }
@@ -451,25 +455,49 @@ public:
     void unselect_all()
     {
         for (int i = 0; i < nframes; i++){frames[i].is_selected = false;}
-        selected_frame = -1;
+        selected_frame -= 1;
     }
     
-    void operator()(audio_bundle input, audio_bundle output) {
+    void create_table_from_frame(int _current_pos)
+    {
+        std::vector<std::vector<float>> current_frame{11};
+        for (auto x : current_frame)    //12 tables with size 2048 -> but isn't size dynamic?
+        {
+            x.resize(2048);
+        }
         
-//        auto          in  = input.samples(0);                                     // get vector for channel 0 (first channel)
-//        auto          out = output.samples(0);                                    // get vector for channel 0 (first channel)
-//        buffer_lock<> b(m_buffer);                                                  // gain access to the buffer~ content -> outside process()
-//        auto          chan = std::min<size_t>(m_channel - 1, b.channel_count());    // convert from 1-based indexing to 0-based
-//
-//        if (b.valid()) {
-//            for (auto i = 0; i < input.frame_count(); ++i) {
-//                auto frame = size_t(in[i] + 0.5);
-//                out[i]     = b.lookup(frame, chan);
-//            }
-//        }
-//        else {
-//            output.clear();
-//        }
+        std::vector<float>::iterator frame_ptr = frames[_current_pos].samples.begin();
+        
+        Butterfly::antialiase<float, 2048, std::vector<float>::iterator, std::vector<float>::iterator, std::vector<std::vector<float>>::iterator>(frame_ptr, split_freqs.begin(), split_freqs.end(), current_frame.begin(), static_cast<double>(sampleRate), fft_calculator);       //Not sure about this one…
+        
+        for (int i = 0; i < current_frame.size(); i++)      //Write into Wavetable Object
+        {
+            tables[i].setData(current_frame[i].begin(),current_frame[i].end(), split_freqs[i]);
+        }
+        
+        osc = {&tables, sampleRate, 360.f};
+        
+    }
+    
+    message<> set_freq
+    {
+        this, "set_freq", MIN_FUNCTION
+        {
+            float freq = static_cast<float>(args[0]);
+            osc.setFrequency(freq);
+//            morphingWavetableOscillator.setFrequency(freq);
+            return{};
+        }
+    };
+    
+    void operator()(audio_bundle input, audio_bundle output)
+    {
+        auto in  = input.samples(0);                           // get vector for channel 0 (first channel)
+        auto out = output.samples(0);                          // get vector for channel 0 (first channel)
+
+        for (auto i = 0; i < input.frame_count(); ++i) {
+            out[i]     = ++osc;
+        }
     }
     
 private:
@@ -482,9 +510,11 @@ private:
     float margin{10.f};
     float sampleRate{48000.f};
     int export_tablesize{2048};
-    std::vector<Butterfly::Wavetable<float>> tables;
-    Butterfly::WavetableOscillator<Butterfly::Wavetable<float>> osc{tables, sampleRate, 349.23f};
-    //Butterfly::MorpingWavetableOscillator<Butterfly::WavetableOscillator> morphingWavetableOscillator;
+    std::vector<float> split_freqs{20.f, 40.f, 80.f, 160.f, 320.f, 640.f, 1280.f, 2560.f, 6120.f, 12240.f, 24480.f};
+    const Butterfly::FFTCalculator<float, 2048> fft_calculator;
+    std::vector<Butterfly::Wavetable<float>> tables{11};
+    Butterfly::WavetableOscillator<Butterfly::Wavetable<float>> osc{sampleRate};      //Das in dsp_setup verschieben und mit korrekter sampleRate initialisieren
+//    Butterfly::MorpingWavetableOscillator<Butterfly::WavetableOscillator<Butterfly::Wavetable<float>>> morphingWavetableOscillator;
 };
 
 MIN_EXTERNAL(stacked_tables);
