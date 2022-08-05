@@ -461,7 +461,7 @@ public:
     void create_table_from_frame(int _current_pos)
     {
         std::vector<std::vector<float>> current_frame{11};
-        for (auto x : current_frame)    //12 tables with size 2048 -> but isn't size dynamic?
+        for (auto& x : current_frame)    //12 tables with size 2048 -> but isn't size dynamic?
         {
             x.resize(2048);
         }
