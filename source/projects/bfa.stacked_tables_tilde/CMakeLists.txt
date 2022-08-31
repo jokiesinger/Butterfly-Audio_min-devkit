@@ -1,7 +1,7 @@
 # Copyright 2018 The Min-DevKit Authors. All rights reserved.
 # Use of this source code is governed by the MIT License found in the License.md file.
 
-cmake_minimum_required(VERSION 3.0)
+cmake_minimum_required(VERSION 3.19)
 
 #set(CMAKE_CXX_STANDARD 20)
 #set(CMAKE_CXX_STANDARD_REQUIRED True)

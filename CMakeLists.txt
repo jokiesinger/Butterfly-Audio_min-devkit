@@ -1,6 +1,11 @@
 cmake_minimum_required(VERSION 3.19)
 project(Min-DevKit)
 
+# Fix behaviour of CMAKE_CXX_STANDARD when targeting MacOS
+If (POLICY CMP0025)
+	cmake_policy(SET CMP0025 NEW)
+endif()
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
