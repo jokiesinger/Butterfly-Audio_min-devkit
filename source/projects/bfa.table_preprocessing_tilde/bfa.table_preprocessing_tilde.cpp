@@ -4,6 +4,8 @@
 /// @license    Use of this source code is governed by the MIT License found in the License.md file.
 
 #include "c74_min.h"
+#include "../../../submodules/Butterfly_Audio_Library/src/wave/src/waveform_processing.h"
+#include "../../../submodules/Butterfly_Audio_Library/src/wave/src/pitch_detection.h"
 
 using namespace c74::min;
 using namespace c74::min::ui;
@@ -65,23 +67,22 @@ public:
     {
         this, "Target Buffer", "target_buffer", description{"Name of buffer~ to write to"}
     };
+    
+    message<> dspsetup{ this, "dspsetup",
+        MIN_FUNCTION {
+            sampleRate = static_cast<float>(args[0]);
+            
+            cout << "dspsetup happend" << endl;
 
-    message<> input_buffer_name
-    {
-        this, "input_buffer_name", "Set input buffer~ reference.", MIN_FUNCTION
-        {
-            m_input_buffer.set(args[0]);
-            redraw();
-            return{};
+            return {};
         }
     };
     
-    message<> target_buffer_name
+    message<> set_mode
     {
-        this, "target_buffer_name", "Set target buffer~ reference.", MIN_FUNCTION
+        this, "set_mode", "Set frame selection mode. 0: Period, 1: Custom.", MIN_FUNCTION
         {
-            m_target_buffer.set(args[0]);
-            redraw();
+            mode = static_cast<int>(args[0]);
             return{};
         }
     };
@@ -103,6 +104,19 @@ public:
                     input_array.push_back(buf.lookup(i, chan));
                 }
             }
+            
+            //Analyze zero-crossings
+            zero_crossings = Butterfly::getCrossings<std::vector<float>::iterator>(input_array.begin(), input_array.end());
+            
+            //Perform pitch detection
+            pitchInfoOptional = Butterfly::getPitch(input_array.begin(), input_array.end());
+            if (pitchInfoOptional) {pitchInfo = *pitchInfoOptional;}
+            
+            //Period duration
+            tf0 = sampleRate / pitchInfo.frequency;
+            
+            //Relevant zero-crossings
+            
             redraw();
             return{};
         }
@@ -120,9 +134,6 @@ public:
 //
 //            mouse_position[0] = x;
 //            mouse_position[1] = y;
-//
-            cout << "Down mouse_position X: " << e.x() << endl;
-//            cout << "Down mouse_position Y: " << e.y() << endl;
             
             return{};
         }
@@ -272,6 +283,11 @@ public:
             return {};
         }
     };
+    
+//    void analyse_period_zero_crossings()
+//    {
+//
+//    }
 
     void operator()(audio_bundle input, audio_bundle output) {
         
@@ -295,10 +311,37 @@ private:
     std::vector<float> input_array;             //from buffer~
     std::vector<float> selection_array;         //copy selection
     std::vector<float> target_array;            //resampling target
+    std::vector<double> zero_crossings;   //story zero crossings that mark full period
     OverlayRect overlay_rect;
     int selection_start, selection_end;         //refers to indices in input_buffer
+    int mode{0};
+    std::optional<Butterfly::PitchInfo> pitchInfoOptional;
+    Butterfly::PitchInfo pitchInfo;
+    float sampleRate{48000.f};
+    float tf0;
     
 };
 
 
 MIN_EXTERNAL(table_preprocessing);
+
+
+//    message<> input_buffer_name
+//    {
+//        this, "input_buffer_name", "Set input buffer~ reference.", MIN_FUNCTION
+//        {
+//            m_input_buffer.set(args[0]);
+//            redraw();
+//            return{};
+//        }
+//    };
+//
+//    message<> target_buffer_name
+//    {
+//        this, "target_buffer_name", "Set target buffer~ reference.", MIN_FUNCTION
+//        {
+//            m_target_buffer.set(args[0]);
+//            redraw();
+//            return{};
+//        }
+//    };

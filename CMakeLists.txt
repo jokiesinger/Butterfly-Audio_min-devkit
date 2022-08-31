@@ -6,6 +6,8 @@ If (POLICY CMP0025)
 	cmake_policy(SET CMP0025 NEW)
 endif()
 
+# target_compile_features(Butterfly-Audio_min-devkit PUBLIC cxx_std_20)
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
@@ -44,7 +46,7 @@ if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/source/min-lib/CMakeLists.txt")
 endif ()
 
 # Add the Butterfly Audio Library
-add_subdirectory(Butterfly_Audio_Library)
+add_subdirectory(submodules/Butterfly_Audio_Library)
 
 #Add library to executable?
 #target_link_libraries(Min-DevKit
