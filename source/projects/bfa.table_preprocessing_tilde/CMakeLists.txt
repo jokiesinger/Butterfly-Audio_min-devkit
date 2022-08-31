@@ -28,6 +28,15 @@ add_library(
 	${SOURCE_FILES}
 )
 
+#Add library to executable?
+target_link_libraries(	${PROJECT_NAME}
+		INTERFACE
+		wave
+		synth
+		math
+		utilities
+		modulation
+)	
 
 include(${C74_MIN_API_DIR}/script/min-posttarget.cmake)
 

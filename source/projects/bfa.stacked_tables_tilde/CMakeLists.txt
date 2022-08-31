@@ -3,6 +3,9 @@
 
 cmake_minimum_required(VERSION 3.0)
 
+#set(CMAKE_CXX_STANDARD 20)
+#set(CMAKE_CXX_STANDARD_REQUIRED True)
+
 set(C74_MIN_API_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../min-api)
 include(${C74_MIN_API_DIR}/script/min-pretarget.cmake)
 
@@ -21,6 +24,8 @@ set( SOURCE_FILES
 	${PROJECT_NAME}.cpp
 )
 
+#set(CMAKE_CXX_STANDARD 20)
+#set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 add_library( 
 	${PROJECT_NAME} 
@@ -28,6 +33,16 @@ add_library(
 	${SOURCE_FILES}
 )
 
+#Add library to executable?
+target_link_libraries(
+		${PROJECT_NAME}
+		INTERFACE
+		wave
+		synth
+		math
+		utilities
+		modulation
+)
 
 include(${C74_MIN_API_DIR}/script/min-posttarget.cmake)
 
