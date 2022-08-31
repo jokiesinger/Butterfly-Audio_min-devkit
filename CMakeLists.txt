@@ -39,7 +39,7 @@ if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/source/min-lib/CMakeLists.txt")
 endif ()
 
 # Add the Butterfly Audio Library
-add_subdirectory(submodules/Butterfly_Audio_Library)
+add_subdirectory(Butterfly_Audio_Library)
 
 #Add library to executable?
 #target_link_libraries(Min-DevKit
