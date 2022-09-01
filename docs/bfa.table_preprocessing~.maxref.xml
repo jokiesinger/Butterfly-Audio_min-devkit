@@ -41,19 +41,14 @@
 			<description>Read again from the buffer~. </description>
 		</method>
 
-		<method name='target_buffer_name'>
-			<digest>Set target buffer~ reference</digest>
-			<description>Set target buffer~ reference. </description>
+		<method name='set_mode'>
+			<digest>Set frame selection mode</digest>
+			<description>Set frame selection mode. 0: Period, 1: Custom. </description>
 		</method>
 
 		<method name='set'>
 			<digest>Choose a named buffer~ from which to read</digest>
 			<description>Choose a named buffer~ from which to read. </description>
-		</method>
-
-		<method name='input_buffer_name'>
-			<digest>Set input buffer~ reference</digest>
-			<description>Set input buffer~ reference. </description>
 		</method>
 
 	</methodlist>

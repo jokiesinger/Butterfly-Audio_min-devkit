@@ -8,6 +8,7 @@
 #include "../../../submodules/Butterfly_Audio_Library/src/wave/src/antialiase.h"
 #include "../../../submodules/Butterfly_Audio_Library/src/wave/src/waveform_processing.h"
 #include "../../../submodules/Butterfly_Audio_Library/src/synth/src/wavetable_oscillator.h"
+#include "../../../submodules/Butterfly_Audio_Library/src/utilities/src/ramped_value.h"
 //#include "antialiase.h"
 //#include "waveform_processing.h"
 //#include "wavetable_oscillator.h"
@@ -22,8 +23,8 @@ struct Frame
     bool is_empty{true};
     bool is_selected{false};
     std::vector<float> samples;
-    std::vector<Butterfly::Wavetable<float>> multitable{21};
-    unsigned int position{};        //zero based counting?
+    std::vector<Butterfly::Wavetable<float>> multitable{73};    //Must match number of split freqs
+    unsigned int position{};        //zero based counting
 };
 
 struct MorphableFrame
@@ -36,6 +37,8 @@ struct MorphableFrame
     unsigned int upper_frame_idx;
     float lower_frame_weighting;
     float upper_frame_weighting;
+    
+    //Funktionen definieren im Struct!
 };
 
 class stacked_tables : public object<stacked_tables>, public vector_operator<>, public ui_operator<160, 160>
@@ -52,6 +55,7 @@ public:
             
     stacked_tables(const atoms& args = {}) : ui_operator::ui_operator {this, args}
     {
+        split_freqs = calculate_split_freqs();
         std::vector<float> data;
         data.resize(2048, 0);
         for (int i = 0; i < frames.size(); i++)
@@ -64,7 +68,7 @@ public:
         }
         
         morphingWavetableOscillator.setTable(&frames[0].multitable, &frames[1].multitable);
-        morphingWavetableOscillator.setFrequency(100.f);
+        morphingWavetableOscillator.setFrequency(80);
         morphingWavetableOscillator.setParam(0.f);
     }
     
@@ -118,6 +122,8 @@ public:
     message<> dspsetup{ this, "dspsetup",
         MIN_FUNCTION {
             sampleRate = static_cast<float>(args[0]);
+            
+            morphingWavetableOscillator.setSampleRate(sampleRate);
             
             cout << "dspsetup happend" << endl;
 
@@ -287,13 +293,18 @@ public:
                 }
                 //Setup Morphing Wavetable Oscillator
                 morphingWavetableOscillator.setTable(&frames[morphable_frame.lower_frame_idx].multitable, &frames[morphable_frame.upper_frame_idx].multitable);
-                morphingWavetableOscillator.setParam(morphable_frame.upper_frame_weighting);
+                
+//                morphingWavetableOscillator.setParam(morphable_frame.upper_frame_weighting);
+                
+                morphingParam.set(morphable_frame.upper_frame_weighting);
             }
             
             redraw();
             return{};
         }
     };
+    
+    Butterfly::RampedValue<float> morphingParam{0.f, 200};   //Stimmt das mit UI überein?
     
     message<> set_export_tablesize
     {
@@ -308,7 +319,7 @@ public:
     {
         this, "export_table", MIN_FUNCTION
         {
-            if (nactive_frames > 1)
+            if (nactive_frames > 0)
             {
                 int buffer_length = export_tablesize * nactive_frames;
                 message_out("export_buffer_length", buffer_length);    //set buffer~ size
@@ -485,6 +496,34 @@ public:
         }
     };
     
+    message<> flip_phase
+    {
+        this, "flip_phase", MIN_FUNCTION
+        {
+            for (auto &frame : frames)
+            {
+                if (frame.is_selected)
+                {
+                    for (int i = 0; i < frame.samples.size(); i++)
+                    {
+                        frame.samples[i] = frame.samples[i] * -1.f;
+                    }
+                    //Run Antialiaser again and stick to private data member?
+                    for (auto &table : frame.multitable)
+                    {
+                        for (int i = 0; i < table.data.size(); i++)
+                        {
+                            table.data[i] = table.data[i] * -1.f;
+                        }
+                    }
+                    redraw();
+                    break;
+                }
+            }
+            return{};
+        }
+    };
+    
     message<> paint
     {
         this, "paint", MIN_FUNCTION
@@ -512,7 +551,6 @@ public:
         selected_frame -= 1;
     }
     
-    ///Use Antialiaser!
     void create_multitable_from_samples(int _current_pos)
     {
         Butterfly::Antialiaser antialiaser{sampleRate, fft_calculator};
@@ -522,6 +560,22 @@ public:
         
     }
     
+    //Not a nice function. Refactor! With default arguments 73 intervals!
+    std::vector<float> calculate_split_freqs(float interval = 2.f, float highest_split_freq = 22050.f, int lowest_split_freq = 5.f)
+    {
+        std::vector<float> _split_freqs;
+        float current_freq = highest_split_freq;
+        float factor = pow(2.f,(interval / 12.f));
+        while (current_freq > lowest_split_freq)
+        {
+            
+            _split_freqs.push_back(current_freq);
+            current_freq = current_freq / factor;
+        }
+        std::reverse(_split_freqs.begin(), _split_freqs.end());
+        return _split_freqs;
+    }
+    
     
     void operator()(audio_bundle input, audio_bundle output)
     {
@@ -529,6 +583,7 @@ public:
         auto out = output.samples(0);                          // get vector for channel 0 (first channel)
 
         for (auto i = 0; i < input.frame_count(); ++i) {
+            morphingWavetableOscillator.setParam(++morphingParam);
             out[i]     = ++morphingWavetableOscillator * outputGain;
         }
     }
@@ -544,10 +599,9 @@ private:
     float sampleRate{48000.f};
     float outputGain;
     int export_tablesize{2048};
-    std::vector<float> split_freqs{20.f, 30.f, 40.f, 60.f, 80.f, 120.f, 160.f, 240.f, 320.f, 480.f, 640.f, 960.f, 1280.f, 1920.f, 2560.f, 3840.f, 5120.f, 7680.f, 10240.f, 15360.f, 20480.f};
+    std::vector<float> split_freqs;
     const Butterfly::FFTCalculator<float, 2048> fft_calculator;
     std::vector<Butterfly::Wavetable<float>> tables{11};    //Das ist ja nur für ein Frame!
-//    Butterfly::WavetableOscillator<Butterfly::Wavetable<float>> osc{sampleRate};      //Das in dsp_setup verschieben und mit korrekter sampleRate initialisieren
     Butterfly::MorpingWavetableOscillator<Butterfly::WavetableOscillator<Butterfly::Wavetable<float>>> morphingWavetableOscillator{sampleRate};
 };
 

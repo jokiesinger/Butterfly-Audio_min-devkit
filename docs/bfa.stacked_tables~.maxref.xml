@@ -81,6 +81,11 @@
 			<description></description>
 		</method>
 
+		<method name='flip_phase'>
+			<digest></digest>
+			<description></description>
+		</method>
+
 		<method name='set'>
 			<digest>Choose a named buffer~ from which to read</digest>
 			<description>Choose a named buffer~ from which to read. </description>

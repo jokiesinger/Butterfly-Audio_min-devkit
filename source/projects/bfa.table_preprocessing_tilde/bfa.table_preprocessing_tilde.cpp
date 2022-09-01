@@ -83,6 +83,18 @@ public:
         this, "set_mode", "Set frame selection mode. 0: Period, 1: Custom.", MIN_FUNCTION
         {
             mode = static_cast<int>(args[0]);
+            
+            if (mode == 0)
+            {
+                overlay_rect.visible = false;
+            }
+            else if (mode == 1)
+            {
+                overlay_rect.visible = true;
+            }
+            
+            redraw();
+            
             return{};
         }
     };
@@ -107,16 +119,28 @@ public:
             
             //Analyze zero-crossings
             zero_crossings = Butterfly::getCrossings<std::vector<float>::iterator>(input_array.begin(), input_array.end());
+            period_zero_crossings.clear();
             
             //Perform pitch detection
             pitchInfoOptional = Butterfly::getPitch(input_array.begin(), input_array.end());
             if (pitchInfoOptional) {pitchInfo = *pitchInfoOptional;}
             
             //Period duration
-            tf0 = sampleRate / pitchInfo.frequency;
+            tf0 = 1.f / pitchInfo.frequency;
             
             //Relevant zero-crossings
-            
+            for (int i = 0; i < zero_crossings.size(); i++)
+            {
+                float second_period_crossing_idx = zero_crossings[i] + tf0;
+                for (int j = i + 1; j < zero_crossings.size(); j++)
+                {
+                    if (zero_crossings[j] > (second_period_crossing_idx - deviation_in_smps) && zero_crossings[j] < (second_period_crossing_idx + deviation_in_smps))
+                    {
+                        period_zero_crossings.push_back(zero_crossings[i]);
+                        break;
+                    }
+                }
+            }
             redraw();
             return{};
         }
@@ -146,23 +170,42 @@ public:
             event e {args};
             auto mouseup_x = e.x();
             
-            if (mouseup_x > overlay_rect.x)
+            if (mode == 0)
             {
-                overlay_rect.visible = true;
-                overlay_rect.width = mouseup_x - overlay_rect.x;
+                //scale
+                float factor = static_cast<float>(input_array.size()) / external_width;
+                float scaled_mouse_x = mouseup_x * factor;
+                
+                //find nearest
+                selected_zero_crossing = period_zero_crossings[0];
+                for (int i = 0; i < (period_zero_crossings.size() - 1); i++)
+                {
+                    if ((abs(period_zero_crossings[i + 1] - scaled_mouse_x)) < (abs(selected_zero_crossing - scaled_mouse_x)))
+                    {
+                        selected_zero_crossing = period_zero_crossings[i + 1];
+                    }
+                }
             }
-            else if (mouseup_x < overlay_rect.x)
+            else if (mode == 1)
             {
-                overlay_rect.visible = true;
-                overlay_rect.width = overlay_rect.x - mouseup_x;
-                overlay_rect.x = mouseup_x;
-            }
-            else if (mouseup_x == overlay_rect.x)
-            {
-                overlay_rect.visible = false;
+                if (mouseup_x > overlay_rect.x)
+                {
+                    overlay_rect.visible = true;
+                    overlay_rect.width = mouseup_x - overlay_rect.x;
+                }
+                else if (mouseup_x < overlay_rect.x)
+                {
+                    overlay_rect.visible = true;
+                    overlay_rect.width = overlay_rect.x - mouseup_x;
+                    overlay_rect.x = mouseup_x;
+                }
+                else if (mouseup_x == overlay_rect.x)
+                {
+                    overlay_rect.visible = false;
+                }
             }
             
-//            cout << "Up mouse_position X: " << e.x() << endl;
+            //Hier die selection array geschichte machen…
             
             redraw();
             
@@ -190,7 +233,7 @@ public:
     {
         this, "generate_frame", MIN_FUNCTION
         {
-            if (overlay_rect.visible)
+            if (overlay_rect.visible || (selected_zero_crossing > 0))
             {
                 buffer_lock<> buf(m_target_buffer);
                 int target_tablesize = buf.frame_count();
@@ -224,10 +267,11 @@ public:
         this, "paint", MIN_FUNCTION
         {
             target t        {args};
-            float array_height = t.height();
-            float array_width = t.width();
+            external_height = t.height();
+            external_width = t.width();
             
-            float factor = static_cast<float>(input_array.size()) / array_width;
+            float factor = static_cast<float>(input_array.size()) / external_width;
+            float factor_inv = static_cast<float>(external_width / static_cast<float>(input_array.size()));
             selection_start = static_cast<int>(floor(overlay_rect.x * factor));
             selection_end = static_cast<int>(floor((overlay_rect.x + overlay_rect.width) * factor));
             selection_array.clear();
@@ -242,24 +286,39 @@ public:
             if (input_array.size() > 0)         //Check if input_buffer is non-zero
             {
                 float origin_x = 0.f;
-                float origin_y = array_height * .5f;
+                float origin_y = external_height * .5f;
                 for (int i = 0; i < (input_array.size()); i++)
                 {
                     float frac = static_cast<float>(i) / static_cast<float>(input_array.size());
-                    float x = frac * array_width;
-                    float y = (input_array[i] * array_height * -.5f) + (array_height * .5f);
+                    float x = frac * external_width;
+                    float y = (input_array[i] * external_height * -.5f) + (external_height * .5f);
                     number stroke_width = 1;
-                    if (i >= selection_start && i <= selection_end)
+                    
+                    if (mode == 0)
                     {
-                        stroke_width = 2;
-                        selection_array.push_back(input_array[i]);
+                        if (i >= floor(selected_zero_crossing) && i <= floor(selected_zero_crossing + tf0))
+                        {
+                            stroke_width = 2;
+                            selection_array.push_back(input_array[i]);
+                        }
                     }
-                    line<stroke> {
+                    
+                    if (mode == 1)
+                    {
+                        if (i >= selection_start && i <= selection_end)
+                        {
+                            stroke_width = 2;
+                            selection_array.push_back(input_array[i]);
+                        }
+                    }
+
+                    line<stroke>
+                    {
                         t,
                         color {m_elementcolor},
                         origin {origin_x, origin_y},
                         destination{x, y},
-                        line_width{stroke_width},
+                        line_width{stroke_width}
                     };
                     
                     origin_x = x;
@@ -278,9 +337,34 @@ public:
                     size{overlay_rect.width, overlay_rect.height}
                 };
             }
-
             
-            return {};
+            if (mode == 0)
+            {
+            float scale_height = (external_height * 0.2f);
+                for (auto value : period_zero_crossings)
+                {
+                    float x_position = value * factor_inv;
+                    line<stroke>
+                    {
+                        t,
+                        color {color::predefined::white},
+                        origin {x_position, 0.f + scale_height},
+                        destination {x_position, external_height - scale_height},
+                        line_width{1}
+                    };
+                }
+                line<stroke>
+                {
+                    t,
+                    color {color::predefined::black},
+                    origin {selected_zero_crossing * factor_inv, 0.f + scale_height},
+                    destination {selected_zero_crossing * factor_inv, external_height - scale_height},
+                    line_width{2}
+                        
+                };
+            }
+
+        return {};
         }
     };
     
@@ -311,14 +395,16 @@ private:
     std::vector<float> input_array;             //from buffer~
     std::vector<float> selection_array;         //copy selection
     std::vector<float> target_array;            //resampling target
-    std::vector<double> zero_crossings;   //story zero crossings that mark full period
+    std::vector<double> zero_crossings, period_zero_crossings;   //store zero crossings that mark full period
     OverlayRect overlay_rect;
     int selection_start, selection_end;         //refers to indices in input_buffer
+    float selected_zero_crossing;
     int mode{0};
     std::optional<Butterfly::PitchInfo> pitchInfoOptional;
     Butterfly::PitchInfo pitchInfo;
     float sampleRate{48000.f};
-    float tf0;
+    float tf0, deviation_in_smps{10.f};
+    float external_height, external_width;
     
 };
 
