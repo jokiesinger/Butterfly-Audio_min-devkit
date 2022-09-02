@@ -172,19 +172,23 @@ public:
             
             if (mode == 0)
             {
-                //scale
-                float factor = static_cast<float>(input_array.size()) / external_width;
-                float scaled_mouse_x = mouseup_x * factor;
-                
-                //find nearest
-                selected_zero_crossing = period_zero_crossings[0];
-                for (int i = 0; i < (period_zero_crossings.size() - 1); i++)
+                if (period_zero_crossings.size() > 0)
                 {
-                    if ((abs(period_zero_crossings[i + 1] - scaled_mouse_x)) < (abs(selected_zero_crossing - scaled_mouse_x)))
+                    //scale
+                    float factor = static_cast<float>(input_array.size()) / external_width;
+                    float scaled_mouse_x = mouseup_x * factor;
+                    
+                    //find nearest
+                    selected_zero_crossing = period_zero_crossings[0];
+                    for (int i = 0; i < (period_zero_crossings.size() - 1); i++)
                     {
-                        selected_zero_crossing = period_zero_crossings[i + 1];
+                        if ((abs(period_zero_crossings[i + 1] - scaled_mouse_x)) < (abs(selected_zero_crossing - scaled_mouse_x)))
+                        {
+                            selected_zero_crossing = period_zero_crossings[i + 1];
+                        }
                     }
                 }
+
             }
             else if (mode == 1)
             {

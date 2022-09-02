@@ -33,10 +33,11 @@ struct MorphableFrame
     bool is_visible{false};
     float y_offset;
     float y_scaling;
-    unsigned int lower_frame_idx;
-    unsigned int upper_frame_idx;
-    float lower_frame_weighting;
-    float upper_frame_weighting;
+    unsigned int lower_frame_idx{0};
+    unsigned int upper_frame_idx{1};
+    float lower_frame_weighting{0.f};
+    float upper_frame_weighting{1.f};
+    Butterfly::RampedValue<float> upperFrameWeighting{1.f, 100};
     
     //Funktionen definieren im Struct!
 };
@@ -68,7 +69,7 @@ public:
         }
         
         morphingWavetableOscillator.setTable(&frames[0].multitable, &frames[1].multitable);
-        morphingWavetableOscillator.setFrequency(80);
+        morphingWavetableOscillator.setFrequency(80.f);
         morphingWavetableOscillator.setParam(0.f);
     }
     
@@ -170,6 +171,7 @@ public:
                 create_multitable_from_samples(current_pos);
                 
                 nactive_frames++;
+                calculate_morphing_frame();
                 redraw();
             }
             
@@ -189,8 +191,13 @@ public:
             {
                 frames[i].is_empty = true;
                 frames[i].samples.clear();
+                for (auto &table : frames[i].multitable)
+                {
+                    table.data.clear();
+                }
             }
             nactive_frames = 0;
+            calculate_morphing_frame();
             redraw();
             return{};
         }
@@ -252,8 +259,10 @@ public:
                         break;
                     }
                 }
+                
                 if(!(selected_frame == 0)){selected_frame -= 1;}
             }
+            calculate_morphing_frame();
             redraw();
             return {};
         }
@@ -263,48 +272,57 @@ public:
     {
         this, "morph_position", MIN_FUNCTION
         {
-            float pos = args[0];
-            float position = pos * (nactive_frames - 1);
-            morphable_frame.samples.clear();                //clearen und neu pushbacken = Katastrophe!
+            pos = args[0];
             
-            if (nactive_frames == 0 || nactive_frames == 1)
-            {
-                morphable_frame.is_visible = false;
-            }
-            else if (nactive_frames > 1 && nactive_frames <= nframes)
-            {
-                morphable_frame.is_visible = true;
-                morphable_frame.y_offset = (spacing * position) + (spacing / 2);
-                morphable_frame.lower_frame_idx = floor(position);
-                morphable_frame.upper_frame_idx = ceil(position);
-                morphable_frame.lower_frame_weighting = morphable_frame.upper_frame_idx - position;
-                morphable_frame.upper_frame_weighting = position - morphable_frame.lower_frame_idx;
-                
-                for (int i = 0; i < tablesize; i++)
-                {
-                    if (morphable_frame.lower_frame_idx == morphable_frame.upper_frame_idx)
-                    {
-                        morphable_frame.samples[i] = frames[morphable_frame.upper_frame_idx].samples[i];
-                    }
-                    else
-                    {
-                        morphable_frame.samples.push_back((frames[morphable_frame.upper_frame_idx].samples[i] * morphable_frame.upper_frame_weighting) + (frames[morphable_frame.lower_frame_idx].samples[i] * morphable_frame.lower_frame_weighting));
-                    }
-                }
-                //Setup Morphing Wavetable Oscillator
-                morphingWavetableOscillator.setTable(&frames[morphable_frame.lower_frame_idx].multitable, &frames[morphable_frame.upper_frame_idx].multitable);
-                
-//                morphingWavetableOscillator.setParam(morphable_frame.upper_frame_weighting);
-                
-                morphingParam.set(morphable_frame.upper_frame_weighting);
-            }
+            calculate_morphing_frame();
             
-            redraw();
             return{};
         }
     };
     
-    Butterfly::RampedValue<float> morphingParam{0.f, 200};   //Stimmt das mit UI überein?
+    void calculate_morphing_frame()
+    {
+        float position = pos * static_cast<float>(nactive_frames - 1);
+        morphable_frame.samples.clear();                //clearen und neu pushbacken = Katastrophe!
+        
+        if (nactive_frames == 0 || nactive_frames == 1)
+        {
+            morphable_frame.is_visible = false;
+        }
+        else if (nactive_frames > 1 && nactive_frames <= nframes)
+        {
+            morphable_frame.is_visible = true;
+            morphable_frame.y_offset = (spacing * position) + (spacing / 2);
+            morphable_frame.lower_frame_idx = floor(position);
+            morphable_frame.upper_frame_idx = ceil(position);
+            cout << "Lower frame idx: " << morphable_frame.lower_frame_idx << endl;
+            cout << "Upper frame idx: " << morphable_frame.upper_frame_idx << endl;
+//            morphable_frame.upper_frame_idx = morphable_frame.lower_frame_idx + 1;
+            morphable_frame.lower_frame_weighting = morphable_frame.upper_frame_idx - position;
+//            morphable_frame.upper_frame_weighting = position - morphable_frame.lower_frame_idx;
+            morphable_frame.upper_frame_weighting = 1.f - morphable_frame.lower_frame_weighting;
+            cout << "Lower frame weighting: " << morphable_frame.lower_frame_weighting << endl;
+            cout << "Upper frame weighting: " << morphable_frame.upper_frame_weighting << endl;
+            
+            for (int i = 0; i < tablesize; i++)
+            {
+                if (morphable_frame.lower_frame_idx == morphable_frame.upper_frame_idx)
+                {
+                    morphable_frame.samples.push_back(frames[morphable_frame.upper_frame_idx].samples[i]);
+                }
+                else
+                {
+                    morphable_frame.samples.push_back((frames[morphable_frame.upper_frame_idx].samples[i] * morphable_frame.upper_frame_weighting) + (frames[morphable_frame.lower_frame_idx].samples[i] * morphable_frame.lower_frame_weighting));
+                }
+            }
+            //Setup Morphing Wavetable Oscillator
+            morphingWavetableOscillator.setTable(&frames[morphable_frame.lower_frame_idx].multitable, &frames[morphable_frame.upper_frame_idx].multitable);
+            
+            morphingParam.set(morphable_frame.upper_frame_weighting);
+        }
+        
+        redraw();
+    }
     
     message<> set_export_tablesize
     {
@@ -365,6 +383,119 @@ public:
 
             
             return{};
+        }
+    };
+    
+    message<> move_up_selected_frame
+    {
+        this, "move_up_selected_frame", MIN_FUNCTION
+        {
+            if (selected_frame == 0){cout << "Can't move up selected frame." << endl;}
+            else
+            {
+                Frame temporary_frame = frames[selected_frame - 1];
+                frames[selected_frame - 1] = frames[selected_frame];
+                frames[selected_frame - 1].position = frames[selected_frame].position - 1;
+                frames[selected_frame] = temporary_frame;
+                frames[selected_frame].position = temporary_frame.position + 1;
+                frames[selected_frame].is_selected = false;
+                
+                selected_frame -= 1;
+                calculate_morphing_frame();
+                redraw();
+            }
+            return {};
+        }
+    };
+
+    message<> move_down_selected_frame
+    {
+        this, "move_down_selected_frame", MIN_FUNCTION
+        {
+            if(selected_frame == (nactive_frames - 1)){cout << "Can't move down selected framd." << endl;}
+            else
+            {
+                Frame temporary_frame = frames[selected_frame + 1];
+                frames[selected_frame + 1] = frames[selected_frame];
+                frames[selected_frame + 1].position = frames[selected_frame].position + 1;
+                frames[selected_frame] = temporary_frame;
+                frames[selected_frame].position = temporary_frame.position - 1;
+                frames[selected_frame].is_selected = false;
+                selected_frame += 1;
+                calculate_morphing_frame();
+                redraw();
+            }
+            return{};
+        }
+    };
+    
+    message<> set_freq
+    {
+        this, "set_freq", MIN_FUNCTION
+        {
+            float freq = static_cast<float>(args[0]);   ///Range clampen!
+            morphingWavetableOscillator.setFrequency(freq);
+            return{};
+        }
+    };
+    
+    message<> set_output_gain
+    {
+        this, "set_output_gain", MIN_FUNCTION
+        {
+            outputGain.set(static_cast<float>(args[0]));         ///Range clampen!
+            return{};
+        }
+    };
+    
+    message<> flip_phase
+    {
+        this, "flip_phase", MIN_FUNCTION
+        {
+            for (auto &frame : frames)
+            {
+                if (frame.is_selected)
+                {
+                    for (int i = 0; i < frame.samples.size(); i++)
+                    {
+                        frame.samples[i] = frame.samples[i] * -1.f;
+                    }
+                    //Run Antialiaser again and stick to private data member?
+                    for (auto &table : frame.multitable)
+                    {
+                        for (int i = 0; i < table.data.size(); i++)
+                        {
+                            table.data[i] = table.data[i] * -1.f;
+                        }
+                    }
+                    calculate_morphing_frame();
+                    redraw();
+                    break;
+                }
+            }
+            return{};
+        }
+    };
+    
+    message<> paint
+    {
+        this, "paint", MIN_FUNCTION
+        {
+            target t {args};
+            float height = t.height() - margin;
+            float width = t.width() - margin;
+            spacing = height / static_cast<float>(nactive_frames);
+            y_scaling = ((height - 10.f) / 2.f) / static_cast<float>(nactive_frames);
+            
+            rect<fill>              //Background
+            {
+                t,
+                color {background_color}
+            };
+            
+            for (int i = 0; i < nactive_frames; i++){draw_frame(i, t);} //Draw active frames, könnte man mit nem if kombinieren, um nicht bei jedem neuen Morph-Frame zu zeichnen?
+            draw_morphable_frame(t);
+            return {};
         }
     };
     
@@ -435,115 +566,6 @@ public:
             }
         }
     }
-    
-    message<> move_up_selected_frame
-    {
-        this, "move_up_selected_frame", MIN_FUNCTION
-        {
-            if (selected_frame == 0){cout << "Can't move up selected frame." << endl;}
-            else
-            {
-                Frame temporary_frame = frames[selected_frame - 1];
-                frames[selected_frame - 1] = frames[selected_frame];
-                frames[selected_frame - 1].position = frames[selected_frame].position - 1;
-                frames[selected_frame] = temporary_frame;
-                frames[selected_frame].position = temporary_frame.position + 1;
-                frames[selected_frame].is_selected = false;
-                
-                selected_frame -= 1;
-                redraw();
-            }
-            return {};
-        }
-    };
-
-    message<> move_down_selected_frame
-    {
-        this, "move_down_selected_frame", MIN_FUNCTION
-        {
-            if(selected_frame == (nactive_frames - 1)){cout << "Can't move down selected framd." << endl;}
-            else
-            {
-                Frame temporary_frame = frames[selected_frame + 1];
-                frames[selected_frame + 1] = frames[selected_frame];
-                frames[selected_frame + 1].position = frames[selected_frame].position + 1;
-                frames[selected_frame] = temporary_frame;
-                frames[selected_frame].position = temporary_frame.position - 1;
-                frames[selected_frame].is_selected = false;
-                selected_frame += 1;
-                redraw();
-            }
-            return{};
-        }
-    };
-    
-    message<> set_freq
-    {
-        this, "set_freq", MIN_FUNCTION
-        {
-            float freq = static_cast<float>(args[0]);   ///Range clampen!
-            morphingWavetableOscillator.setFrequency(freq);
-            return{};
-        }
-    };
-    
-    message<> set_output_gain
-    {
-        this, "set_output_gain", MIN_FUNCTION
-        {
-            outputGain = static_cast<float>(args[0]);         ///Range clampen!
-            return{};
-        }
-    };
-    
-    message<> flip_phase
-    {
-        this, "flip_phase", MIN_FUNCTION
-        {
-            for (auto &frame : frames)
-            {
-                if (frame.is_selected)
-                {
-                    for (int i = 0; i < frame.samples.size(); i++)
-                    {
-                        frame.samples[i] = frame.samples[i] * -1.f;
-                    }
-                    //Run Antialiaser again and stick to private data member?
-                    for (auto &table : frame.multitable)
-                    {
-                        for (int i = 0; i < table.data.size(); i++)
-                        {
-                            table.data[i] = table.data[i] * -1.f;
-                        }
-                    }
-                    redraw();
-                    break;
-                }
-            }
-            return{};
-        }
-    };
-    
-    message<> paint
-    {
-        this, "paint", MIN_FUNCTION
-        {
-            target t        {args};
-            float height = t.height() - margin;
-            float width = t.width() - margin;
-            spacing = height / static_cast<float>(nactive_frames);
-            y_scaling = ((height - 10.f) / 2.f) / static_cast<float>(nactive_frames);
-            
-            rect<fill>              //Background
-            {
-                t,
-                color {background_color}
-            };
-            for (int i = 0; i < nactive_frames; i++){draw_frame(i, t);} //Draw active frames, könnte man mit nem if kombinieren, um nicht bei jedem neuen Morph-Frame zu zeichnen?
-            draw_morphable_frame(t);
-            return {};
-        }
-    };
 
     void unselect_all()
     {
@@ -555,9 +577,6 @@ public:
     {
         Butterfly::Antialiaser antialiaser{sampleRate, fft_calculator};
         antialiaser.antialiase(frames[_current_pos].samples.begin(), split_freqs.begin(), split_freqs.end(), frames[_current_pos].multitable);
-        
-//        osc = {&tables, sampleRate, 360.f};
-        
     }
     
     //Not a nice function. Refactor! With default arguments 73 intervals!
@@ -584,7 +603,7 @@ public:
 
         for (auto i = 0; i < input.frame_count(); ++i) {
             morphingWavetableOscillator.setParam(++morphingParam);
-            out[i]     = ++morphingWavetableOscillator * outputGain;
+            out[i]     = ++morphingWavetableOscillator * ++outputGain;
         }
     }
     
@@ -597,12 +616,15 @@ private:
     float y_scaling;
     float margin{10.f};
     float sampleRate{48000.f};
-    float outputGain;
+    //float outputGain;
+    float pos{1.f};
     int export_tablesize{2048};
     std::vector<float> split_freqs;
     const Butterfly::FFTCalculator<float, 2048> fft_calculator;
     std::vector<Butterfly::Wavetable<float>> tables{11};    //Das ist ja nur für ein Frame!
     Butterfly::MorpingWavetableOscillator<Butterfly::WavetableOscillator<Butterfly::Wavetable<float>>> morphingWavetableOscillator{sampleRate};
+    Butterfly::RampedValue<float> morphingParam{1.f, 1000};   //Stimmt das mit UI überein?
+    Butterfly::RampedValue<float> outputGain{0.f, 1000};
 };
 
 MIN_EXTERNAL(stacked_tables);
