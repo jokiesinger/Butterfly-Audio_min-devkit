@@ -13,7 +13,7 @@
 	<!--METADATA-->
 
 	<metadatalist>
-		<metadata name='author'>Jonas Kieser </metadata>
+		<metadata name='author'>BFA_JK </metadata>
 		<metadata name='tag'>audio</metadata>
 		<metadata name='tag'>wavetable</metadata>
 		<metadata name='tag'>ui</metadata>
@@ -98,9 +98,9 @@
 
 	<attributelist>
 
-		<attribute name='Tablesize' get='1' set='1' type='long' size='1' >
-			<digest>Tablesize of input and stacked frames buffer</digest>
-			<description>Tablesize of input and stacked frames buffer. </description>
+		<attribute name='Export tablesize' get='1' set='1' type='long' size='1' >
+			<digest>Default export tablesize</digest>
+			<description>Default export tablesize. </description>
 		</attribute>
 
 		<attribute name='Max stacked Frames' get='1' set='1' type='long' size='1' >
