@@ -24,21 +24,25 @@ using namespace c74::min::ui;
 class stacked_tables : public object<stacked_tables>, public vector_operator<>, public ui_operator<160, 160>
 {
 private:
-    std::vector<Frame> frames{16};      //Das könnte auch ein Attribut werden
+//    std::vector<Frame> frames;      //Das könnte auch ein Attribut werden
+    StackedFrames stackedFrames;
     MorphableFrame morphable_frame;
-    unsigned int nactive_frames{0};
+    
     int selected_frame;
     int n_intervals;
     float spacing;
     float y_scaling;
     float margin{10.f};
+    
     float sampleRate{48000.f};
-    //float outputGain;
+
     float pos{1.f};
     static constexpr int internal_tablesize{2048};
+    
     std::vector<float> split_freqs;
     const Butterfly::FFTCalculator<float, internal_tablesize> fft_calculator;
     Butterfly::MorpingWavetableOscillator<Butterfly::WavetableOscillator<Butterfly::Wavetable<float>>> morphingWavetableOscillator{sampleRate};
+    
     Butterfly::RampedValue<float> morphingParam{1.f, 1000};   //Stimmt das mit UI überein?
     Butterfly::RampedValue<float> outputGain{0.f, 1000};
     
@@ -51,26 +55,6 @@ public:
     inlet<>  message_in      { this, "(message) Messages in."};
     outlet<> message_out     { this, "(message) Messages out."};
     outlet<> output          { this, "(signal) Synthesized wavetable signal out.", "signal"};
-            
-    stacked_tables(const atoms& args = {}) : ui_operator::ui_operator {this, args}
-    {
-        split_freqs = calculate_split_freqs();
-        n_intervals = split_freqs.size();
-        
-        std::vector<float> data(internal_tablesize);
-        for (auto &frame : frames)
-        {
-            frame.multitable.resize(n_intervals);
-            for (auto &table : frame.multitable)
-            {
-                table.setData(data);
-            }
-        }
-        
-        morphingWavetableOscillator.setTable(&frames[0].multitable, &frames[1].multitable);
-        morphingWavetableOscillator.setFrequency(80.f);     //Das könnte ein Attribut sein
-        morphingWavetableOscillator.setParam(0.f);
-    }
     
     buffer_reference input_buffer { this,                   //Constructor of buffer reference before input_buffer_name attribute
         MIN_FUNCTION {                                      // will receive a symbol arg indicating 'binding', 'unbinding', or 'modified'
@@ -108,7 +92,7 @@ public:
         this, "Input Buffer", "target_buffer", description{"Name of buffer~ to read from"}
     };
     
-    attribute<int> nframes
+    attribute<int> maxFrames
     {
         this, "Max stacked Frames", 16, description{"Maximum number of possible stacked frames. Has to match number of stacked_frames_buffer channels."}
     };
@@ -117,6 +101,26 @@ public:
     {
         this, "Export tablesize", 1048, description{"Default export tablesize."}
     };
+            
+    stacked_tables(const atoms& args = {}) : ui_operator::ui_operator {this, args}
+    {
+        n_intervals = calculate_split_freqs(split_freqs);
+        
+        stackedFrames.init(maxFrames, sampleRate);
+        
+//        for (auto &frame : frames)
+//        {
+//            frame.multitable.resize(n_intervals);
+//            for (auto &table : frame.multitable)
+//            {
+//                table.resize(internal_tablesize, 0.f);
+//            }
+//        }
+        
+//        morphingWavetableOscillator.setTable(&frames[0].multitable, &frames[1].multitable);
+//        morphingWavetableOscillator.setFrequency(80.f);     //Das könnte ein Attribut sein
+//        morphingWavetableOscillator.setParam(0.f);
+    }
     
     message<> dspsetup{ this, "dspsetup",
         MIN_FUNCTION {
@@ -130,59 +134,104 @@ public:
         }
     };
     
+    //Nicht so viele if - else schachteln
+    //Lieber mehrere, kleine member functions anlegen
     message<> add_frame
     {
         this, "add_frame", "Read from input buffer", MIN_FUNCTION
         {
-            if (nactive_frames >= nframes)
+            //Read from buffer
+            input_buffer.set(input_buffer_name);
+            buffer_lock<> buf(input_buffer);
+            auto chan = std::min<size_t>(m_channel - 1, buf.channel_count());
+            if (!(chan == 1))
+            {
+                cout << "Buffer channel count has to be one.\n";
+                return{};
+            }
+            if (!buf.valid())
+            {
+                return{};
+            }
+            
+            if(!(buf.frame_count() == internal_tablesize))
+            {
+                cout << "Buffer size has to be 2048 samples.\n";
+                return{};
+            }
+            
+            std::vector<float> data;
+            for (auto i = 0; i < buf.frame_count(); i++)         //Get samples
+            {
+                data.push_back(buf.lookup(i, chan));
+            }
+            
+            int state;
+            state = stackedFrames.addFrame(data, sampleRate, split_freqs, fft_calculator);
+            if (state == 0)
+            {
+                cout << "Frame succesfully added.\n";
+            }
+            if (state == 1)
             {
                 cout << "Max frame count reached." << endl;
                 message_out.send("Max frame count reached");    //Das dem Nutzer prompten
             }
-            //Nicht so viele if - else schachteln
-            //Lieber mehrere, kleine member functions anlegen
-            else if (nactive_frames < nframes)
-            {
-                auto current_pos = get_next_free_frame(frames);
-                
-                if (current_pos.has_value())
-                {
-                    selected_frame = *current_pos;
-                    
-                    input_buffer.set(input_buffer_name);
-                    buffer_lock<> buf(input_buffer);
-                    auto chan = std::min<size_t>(m_channel - 1, buf.channel_count());
-                    assert(chan == 1);
-                    if (buf.valid())
-                    {
-                        assert(buf.frame_count() == internal_tablesize && "Buffer is not 2048 samples");    //Nur für Debug! Besser mit if und entsprechend messages ausgeben.
-                        frames[*current_pos].samples.resize(internal_tablesize, 0);
-                        
-                        for (auto i = 0; i < buf.frame_count(); i++)         //Get samples
-                        {
-                            frames[*current_pos].samples[i] = (buf.lookup(i, chan));
-                        }
-                    }
-                    
-                    select_current_frame(*current_pos, frames);
-
-                    frames[*current_pos].create_multitable_from_samples(sampleRate, split_freqs, fft_calculator);
-                            
-                    calculate_morphing_frame();
-                    
-                    nactive_frames++;
-                    
-                    redraw();
-                }
-                
-            }
-            
-            if (nactive_frames == 1)
-            {
-                morphingWavetableOscillator.setTable(&frames[0].multitable, &frames[1].multitable);
-            }
             
             return{};
+        }
+    };
+    
+    message<> flip_phase
+    {
+        this, "flip_phase", MIN_FUNCTION
+        {
+            stackedFrames.flipPhase(sampleRate, split_freqs, fft_calculator);
+
+            redraw();
+            
+            return{};
+        }
+    };
+    
+    message<> move_up_selected_frame
+    {
+        this, "move_up_selected_frame", MIN_FUNCTION
+        {
+            if (stackedFrames.moveFrontSelectedFrame() != 0)
+            {
+                cout << "Can't move up selected frame.\n";
+            }
+            
+            redraw();
+            return {};
+        }
+    };
+
+    message<> move_down_selected_frame
+    {
+        this, "move_down_selected_frame", MIN_FUNCTION
+        {
+            if (stackedFrames.moveBackSelectedFrame() != 0)
+            {
+                cout << "Can't move down selected frame.\n";
+            }
+
+            redraw();
+            return{};
+        }
+    };
+    
+    message<> delete_selected_frame
+    {
+        this, "delete_selected_frame", MIN_FUNCTION
+        {
+            if (stackedFrames.removeSelectedFrame() != 0)
+            {
+                cout << "No frame to delete.\n";
+            }
+            redraw();
+            return {};
         }
     };
     
@@ -190,11 +239,7 @@ public:
     {
         this, "clear_all", MIN_FUNCTION
         {
-            clear_all_frames(frames);
-            
-            nactive_frames = 0;
-            
-            calculate_morphing_frame();
+            stackedFrames.clearFrames();
             
             redraw();
             
@@ -206,64 +251,14 @@ public:
     {
         this, "mousedown", MIN_FUNCTION
         {
-            unselect_all_frames(frames);
             event e {args};
             auto mouse_y = e.y();
+            ///TODO: spacing Berechnung und Verwendung überprüfen
             int y_click = floor(mouse_y / (spacing + 1.f));
-            frames[y_click].is_selected = true;
-            selected_frame = y_click;
+            stackedFrames.selectFrame(y_click);
             redraw();
             cout << "Selected Frame: " << y_click << endl;
             return{};
-        }
-    };
-    
-    message<> delete_selected_frame
-    {
-        this, "delete_selected_frame", MIN_FUNCTION
-        {
-            if (nactive_frames > 0)
-            {
-                nactive_frames -= 1;
-                for (int i = selected_frame; i <nframes; i++)
-                {
-                    if (i < (nframes - 1))
-                    {
-                        int next_frame = i + 1;
-                        frames[i].samples = frames[next_frame].samples;
-                        frames[i].position = frames[next_frame].position - 1;
-                        frames[i].is_empty = frames[next_frame].is_empty;
-                        
-                        if (frames[next_frame].is_empty)
-                        {
-                            frames[selected_frame].is_selected = false;
-                            
-                            if(selected_frame == 0)
-                            {
-                                frames[0].is_selected = true;
-                            }
-                            else
-                            {
-                                frames[selected_frame - 1].is_selected = true;
-                            }
-                            break;
-                        }
-                    }
-                    if (i == (nframes - 1))     //last frame
-                    {
-                        frames[i].samples.clear();
-                        frames[i].is_empty = true;
-                        frames[i].is_selected = false;
-                        frames[i-1].is_selected = true;
-                        break;
-                    }
-                }
-                
-                if(!(selected_frame == 0)){selected_frame -= 1;}
-            }
-            calculate_morphing_frame();
-            redraw();
-            return {};
         }
     };
     
@@ -271,115 +266,10 @@ public:
     {
         this, "morph_position", MIN_FUNCTION
         {
-            pos = args[0];
+            pos = args[0];      //Range check
             
-            calculate_morphing_frame();
+//            calculate_morphing_frame();
             
-            return{};
-        }
-    };
-    
-    message<> set_export_tablesize
-    {
-        this, "set_export_tablesize", MIN_FUNCTION
-        {
-            export_tablesize = static_cast<int>(args[0]);
-            return{};
-        }
-    };
-    
-    message<> export_table
-    {
-        this, "export_table", MIN_FUNCTION
-        {
-            if (nactive_frames > 0)
-            {
-                int buffer_length = export_tablesize * nactive_frames;
-                message_out("export_buffer_length", buffer_length);    //set buffer~ size
-                
-                output_buffer.set(output_buffer_name);
-                buffer_lock<> buf(output_buffer);
-                auto chan = std::min<size_t>(m_channel - 1, buf.channel_count());
-                std::vector<float> concatenated_frames;
-                for (int i = 0; i < nactive_frames; i++)
-                {
-                    concatenated_frames.insert(concatenated_frames.end(), frames[i].samples.begin(), frames[i].samples.end());
-                }
-                if (buf.valid())
-                {
-                    if (export_tablesize == internal_tablesize)
-                    {
-                        for (int i = 0; i < buffer_length; i++)
-                        {
-                            buf[i] = concatenated_frames[i];
-                        }
-                    }
-                    else        //Interpolate into buffer
-                    {
-                        float position = 0.f;
-                        float frac = static_cast<float>(concatenated_frames.size()) / buffer_length;
-                        lib::interpolator::linear<> linear_interpolation;   //bad, linear interpolation
-                        for (int i = 0; i < buffer_length; i++)
-                        {
-                            int lower_index = floor(position);
-                            int upper_index = ceil(position);
-                            upper_index = upper_index > (concatenated_frames.size() - 1) ? (concatenated_frames.size() - 1) : upper_index;
-                            float delta = position - static_cast<float>(lower_index);
-                            float interpolated_value = linear_interpolation.operator()(concatenated_frames[lower_index], concatenated_frames[upper_index], delta);
-                            buf[i] = interpolated_value;
-                            position += frac;
-                        }
-                    }
-                    //Buffer~ wieder unlocken? Passiert wohl wenn scope beendet ist.
-                }
-
-                message_out("exporting_done");
-            }
-
-            
-            return{};
-        }
-    };
-    
-    message<> move_up_selected_frame
-    {
-        this, "move_up_selected_frame", MIN_FUNCTION
-        {
-            if (selected_frame == 0){cout << "Can't move up selected frame." << endl;}
-            else
-            {
-                Frame temporary_frame = frames[selected_frame - 1];
-                frames[selected_frame - 1] = frames[selected_frame];
-                frames[selected_frame - 1].position = frames[selected_frame].position - 1;
-                frames[selected_frame] = temporary_frame;
-                frames[selected_frame].position = temporary_frame.position + 1;
-                frames[selected_frame].is_selected = false;
-                
-                selected_frame -= 1;
-                calculate_morphing_frame();
-                redraw();
-            }
-            return {};
-        }
-    };
-
-    message<> move_down_selected_frame
-    {
-        this, "move_down_selected_frame", MIN_FUNCTION
-        {
-            if(selected_frame == (nactive_frames - 1)){cout << "Can't move down selected framd." << endl;}
-            else
-            {
-                Frame temporary_frame = frames[selected_frame + 1];
-                frames[selected_frame + 1] = frames[selected_frame];
-                frames[selected_frame + 1].position = frames[selected_frame].position + 1;
-                frames[selected_frame] = temporary_frame;
-                frames[selected_frame].position = temporary_frame.position - 1;
-                frames[selected_frame].is_selected = false;
-                selected_frame += 1;
-                calculate_morphing_frame();
-                redraw();
-            }
             return{};
         }
     };
@@ -403,35 +293,52 @@ public:
         }
     };
     
-    message<> flip_phase
+    message<> set_export_tablesize
     {
-        this, "flip_phase", MIN_FUNCTION
+        this, "set_export_tablesize", MIN_FUNCTION
         {
-            for (auto &frame : frames)
-            {
-                if (frame.is_selected)
-                {
-                    for (int i = 0; i < frame.samples.size(); i++)
-                    {
-                        frame.samples[i] = frame.samples[i] * -1.f;
-                    }
-                    //Run Antialiaser again and stick to private data member?
-                    for (auto &table : frame.multitable)
-                    {
-                        for (int i = 0; i < table.data.size(); i++)
-                        {
-                            table.data[i] = table.data[i] * -1.f;
-                        }
-                    }
-                    calculate_morphing_frame();
-                    redraw();
-                    break;
-                }
-            }
+            export_tablesize = static_cast<int>(args[0]);   //Range check
             return{};
         }
     };
     
+    message<> export_table
+    {
+        this, "export_table", MIN_FUNCTION
+        {
+            std::vector<float> stackedTable;
+            if (stackedFrames.getStackedTable(stackedTable, export_tablesize) != 0)
+            {
+                cout << "No table to export.\n";
+            }
+            
+            message_out("export_buffer_length", stackedTable.size());    //set buffer~ size
+            
+            output_buffer.set(output_buffer_name);
+            buffer_lock<> buf(output_buffer);
+            
+            if (buf.channel_count() > 1)
+            {
+                cout << "Output buffer has more than one channel (has to be one).\n";
+                return{};
+            }
+
+            if (buf.valid())
+            {
+                for (int i = 0; i < buf.frame_count(); i++)
+                {
+                    buf[i] = stackedTable[i];
+                }
+
+                message_out("exporting_done");
+            }
+
+            
+            return{};
+        }
+    };
+    
+    ///-----GRAPHICS-----
     message<> paint
     {
         this, "paint", MIN_FUNCTION
@@ -439,8 +346,9 @@ public:
             target t {args};
             float height = t.height() - margin;
             float width = t.width() - margin;
-            spacing = height / static_cast<float>(nactive_frames);
-            y_scaling = ((height - 10.f) / 2.f) / static_cast<float>(nactive_frames);
+            int nActiveFrames = stackedFrames.frames.size();
+            spacing = height / static_cast<float>(nActiveFrames);
+            y_scaling = ((height - 10.f) / 2.f) / static_cast<float>(nActiveFrames);
             
             rect<fill>              //Background
             {
@@ -448,12 +356,15 @@ public:
                 color {background_color}
             };
             
-            for (int i = 0; i < nactive_frames; i++){draw_frame(i, t);} //Draw active frames, könnte man mit nem if kombinieren, um nicht bei jedem neuen Morph-Frame zu zeichnen?
+            for (int i = 0; i < nActiveFrames; i++)
+            {
+                drawStackedFrames(i, t);
+            } //Draw active frames, könnte man mit nem if kombinieren, um nicht bei jedem neuen Morph-Frame zu zeichnen?
             draw_morphable_frame(t);
             return {};
         }
     };
-    
+    /*
     void calculate_morphing_frame()
     {
         float position = pos * static_cast<float>(nactive_frames - 1);
@@ -463,7 +374,7 @@ public:
         {
             morphable_frame.is_visible = false;
         }
-        else if (nactive_frames > 1 && nactive_frames <= nframes)
+        else if (nactive_frames > 1 && nactive_frames <= maxFrames)
         {
             morphable_frame.is_visible = true;
             morphable_frame.y_offset = (spacing * position) + (spacing / 2);
@@ -497,14 +408,16 @@ public:
         
         redraw();
     }
-    
-    void draw_frame(int f, target t)
+    */
+     
+    //Das ist hier ok -> Max spezifisch
+    void drawStackedFrames(int f, target t)
     {
-        float y_offset = (spacing * static_cast<float>(frames[f].position)) + (spacing / 2.f) + (margin / 2.f);
+        float y_offset = (spacing * static_cast<float>(stackedFrames.frames[f].position)) + (spacing / 2.f) + (margin / 2.f);
         float stroke_width = 1.f;
-        if (frames[f].is_selected){stroke_width = 2.f;};
+        if (stackedFrames.frames[f].is_selected){stroke_width = 2.f;};
         float origin_x = margin / 2.f;
-        float origin_y = (frames[f].samples[0] * y_scaling * -1.f) + y_offset;
+        float origin_y = (stackedFrames.frames[f].samples[0] * y_scaling * -1.f) + y_offset;
         float position = 0.f;
         float width = t.width() - margin;
         float frac = static_cast<float>(internal_tablesize) / width;
@@ -515,7 +428,7 @@ public:
             int upper_index = ceil(position);
             upper_index = upper_index > (internal_tablesize - 1) ? (internal_tablesize - 1) : upper_index;
             float delta = position - static_cast<float>(lower_index);
-            float interpolated_value = linear_interpolation.operator()(frames[f].samples[lower_index], frames[f].samples[upper_index], delta);
+            float interpolated_value = linear_interpolation.operator()(stackedFrames.frames[f].samples[lower_index], stackedFrames.frames[f].samples[upper_index], delta);
             float y = (interpolated_value * y_scaling * -1.f) + y_offset;
             int x = i + static_cast<int>(margin / 2.f);
             line<stroke>
@@ -574,7 +487,7 @@ public:
 
         for (auto i = 0; i < input.frame_count(); ++i) {
             morphingWavetableOscillator.setParam(++morphingParam);
-            out[i]     = ++morphingWavetableOscillator * ++outputGain;
+            out[i]     = ++morphingWavetableOscillator * outputGain++;
         }
     }
     
