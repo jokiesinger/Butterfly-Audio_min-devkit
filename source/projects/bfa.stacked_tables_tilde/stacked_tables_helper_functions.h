@@ -7,6 +7,12 @@
 
 #include "../../../submodules/Butterfly_Audio_Library/src/synth/src/wavetable_oscillator.h"
 
+struct Idcs
+{
+    int firstIdx{0};
+    int secondIdx{1};
+};
+
 //More object orientated, struct might be ok but more intelligent
 struct Frame
 {
@@ -19,6 +25,7 @@ struct Frame
     template<int internal_tablesize>
     void create_multitable_from_samples(float sampleRate, const std::vector<float> &split_freqs, const Butterfly::FFTCalculator<float, internal_tablesize> &fft_calculator)
     {
+        multitable.resize(split_freqs.size());
         Butterfly::Antialiaser antialiaser{sampleRate, fft_calculator};
         antialiaser.antialiase(samples.begin(), split_freqs.begin(), split_freqs.end(), multitable);
     }
@@ -68,30 +75,10 @@ struct Frame
     }
 };
 
-struct MorphableFrame
-{
-    std::vector<float> samples;
-    bool is_visible{false};
-    float y_offset;
-    float y_scaling;
-    unsigned int lower_frame_idx{0};
-    unsigned int upper_frame_idx{1};
-    float lower_frame_weighting{0.f};
-    float upper_frame_weighting{1.f};
-    Butterfly::RampedValue<float> upperFrameWeighting{1.f, 100};
-    
-    void clear()
-    {
-        samples.clear();
-        is_visible = false;
-    }
-    //Funktionen definieren im Struct!
-};
-
 class StackedFrames
 {
 private:
-    unsigned int maxFrames{0};
+
 //    unsigned int internalTablesize{2048};
     float sampleRate{};
     std::vector<Butterfly::Wavetable<float>> wavetable;
@@ -121,21 +108,27 @@ private:
         for (int i = 0; i < frames.size(); i++)
         {
             if(frames[i].is_selected)
+            {
                 selectedFrameIdx = i;
-            break;
+                break;
+            }
+
         }
         return selectedFrameIdx;
     }
     
 public:
+    unsigned int maxFrames{0};
     std::vector<Frame> frames;
-    MorphableFrame morphableFrame;
+    //MorphableFrame morphableFrame;
     
-    int init(int _maxFrames, float _sampleRate)
+    StackedFrames() = default;
+    
+    int init(int _maxFrames)
     {
         maxFrames = _maxFrames;
-        sampleRate = _sampleRate;
-        wavetableOscillator.setSampleRate(sampleRate);
+//        sampleRate = _sampleRate;
+        
         return 0;
     }
     
@@ -157,14 +150,18 @@ public:
     {
         for (auto &frame : frames)
         {
-            frame.flipPhase(sampleRate, split_freqs, fft_calculator);
+            if (frame.is_selected)
+            {
+                frame.flipPhase(sampleRate, split_freqs, fft_calculator);
+                break;
+            }
         }
     }
     
     void clearFrames()
     {
         frames.clear();
-        morphableFrame.clear();
+//        morphableFrame.clear();
     }
     
     void selectFrame(int idx)
@@ -213,11 +210,6 @@ public:
     {
         int selectedFrameIdx = getSelectedFrameIdx();
         
-        if (selectedFrameIdx <= 0)
-        {
-            return 1;
-        }
-        
         frames.erase(frames.begin() + selectedFrameIdx);
         unselectAllFrames();    //Unnötig?
         frames[selectedFrameIdx].is_selected = true;
@@ -235,6 +227,7 @@ public:
         {
             return 1;
         }
+        wavetableOscillator.setSampleRate(sampleRate);
         float exportTableOscFreq = sampleRate / static_cast<float>(exportTablesize);
         wavetableOscillator.setFrequency(exportTableOscFreq);
         for (int i = 0; i < frames.size(); i++)
@@ -255,6 +248,177 @@ public:
     }
     
 };
+
+//Sollte das nicht besser von StackedFrames erben?
+class MorphableFrame
+{
+private:
+    void initMorphingOscillatorWithNoTable()
+    {
+        morphingWavetableOscillator.setParam(0.f);
+        morphingWavetableOscillator.setTable(&zeroWavetable, &zeroWavetable);
+        setMorphingPos(0.f);
+    }
+    void initMorphingOscillatorWithOneTable()
+    {
+        morphingWavetableOscillator.setParam(0.f);
+        morphingWavetableOscillator.setTable(&stackedFrames.frames[0].multitable, &zeroWavetable);
+        setMorphingPos(0.f);
+    }
+    
+    float pos{0.f};
+
+public:
+    
+    MorphableFrame() = default;
+    
+    StackedFrames stackedFrames{};        //Factory Function?
+    
+    Butterfly::MorpingWavetableOscillator<Butterfly::WavetableOscillator<Butterfly::Wavetable<float>>> morphingWavetableOscillator{};
+    
+    std::vector<float> morphingSamples;     //for graphics
+    bool is_visible{false};
+    float yOffset;
+    float yScaling;
+    
+    std::vector<float> zeroData;
+    Butterfly::Wavetable<float> zeroTable;
+    std::vector<Butterfly::Wavetable<float>> zeroWavetable;
+        
+    unsigned int firstFrameIdx{0};  //reference to frames.samples[i]
+    unsigned int secondFrameIdx{1};
+    float firstFrameWeighting{1.f};
+    float secondFrameWeighting{0.f};
+
+    void calculateNewIds(float pos)
+    {
+        if (stackedFrames.frames.size() == 0 || 1)
+        {
+            is_visible = false;
+        }
+    }
+    
+    void clear()
+    {
+        morphingSamples.clear();
+        is_visible = false;
+    }
+    
+    void init(float sampleRate, int internalTablesize, float oscFreq)
+    {
+        //Nicht der beste Ort
+        zeroData.resize(internalTablesize, 0.f);
+        zeroTable.setData(zeroData);
+        zeroTable.setMaximumPlaybackFrequency(sampleRate / 2.f);
+        zeroWavetable.push_back(zeroTable);
+        
+        morphingWavetableOscillator.setSampleRate(sampleRate);
+        morphingWavetableOscillator.setFrequency(oscFreq);
+        
+        if (stackedFrames.frames.size() == 0)
+        {
+            initMorphingOscillatorWithNoTable();
+        }
+        else if (stackedFrames.frames.size() == 1)
+        {
+            initMorphingOscillatorWithOneTable();
+        }
+        else
+        {
+//            morphingWavetableOscillator.setParam(0.f);
+            morphingWavetableOscillator.setTable(&stackedFrames.frames[firstFrameIdx].multitable, &stackedFrames.frames[secondFrameIdx].multitable);
+        }
+    }
+    
+    void updateMorphingSamples()
+    {
+        for (int i = 0; i < morphingSamples.size(); i++)
+        {
+            morphingSamples[i] = stackedFrames.frames[firstFrameIdx].samples[i] * firstFrameWeighting + stackedFrames.frames[secondFrameIdx].samples[i] * secondFrameWeighting;
+        }
+    }
+    
+    void refreshMorphingFrame()
+    {
+        float position = pos * static_cast<float>(stackedFrames.frames.size() - 1);
+        
+        //Calculate Idcs -> geht wahrscheinlicher besser und in eigener Funktion!
+        Idcs tempIdcs;
+        tempIdcs.firstIdx = floor(position);
+        tempIdcs.secondIdx = ceil(position);
+        
+        //Change only one Idx if possible (to avoid clicks)
+        if (tempIdcs.firstIdx == firstFrameIdx)
+        {
+            secondFrameIdx = tempIdcs.secondIdx;
+            
+            firstFrameWeighting = (1.f - pos);
+            secondFrameWeighting = (pos);
+            ///TODO: Testen, k.A. ob das passt
+            morphingWavetableOscillator.setTable(&stackedFrames.frames[firstFrameIdx].multitable, &stackedFrames.frames[secondFrameIdx].multitable);
+            ///TODO: Pos ist ramped value und muss von process() geupdated werden!
+            morphingWavetableOscillator.setParam(firstFrameWeighting);
+        }
+        else if (tempIdcs.firstIdx == secondFrameIdx)
+        {
+            firstFrameIdx = tempIdcs.secondIdx;
+        }
+        else if (tempIdcs.secondIdx == firstFrameIdx)
+        {
+            secondFrameIdx = tempIdcs.firstIdx;
+        }
+        else if (tempIdcs.secondIdx == secondFrameIdx)
+        {
+            firstFrameIdx = tempIdcs.firstIdx;
+        }
+        else
+        {
+            firstFrameIdx = tempIdcs.firstIdx;
+            secondFrameIdx = tempIdcs.secondIdx;
+        }
+        updateMorphingSamples();
+        
+    }
+    
+    template<int internal_tablesize>
+    int addFrame(const std::vector<float> &data, float sampleRate, const std::vector<float> &split_freqs, const Butterfly::FFTCalculator<float, internal_tablesize> &fft_calculator)
+    {
+        if (stackedFrames.frames.size() >= stackedFrames.maxFrames)
+        {
+            return 1;
+        }
+        stackedFrames.addFrame(data, sampleRate, split_freqs, fft_calculator);
+        
+        //Will man, dass bei jedem neu hinzugefügtem Frame, dieses direkt hörbar ist? -> Man müsste an die UI kommunizieren. Erstmal nicht.
+        refreshMorphingFrame();
+
+        
+        return 0;
+    }
+    
+    int removeSelectedFrame()
+    {
+        if (stackedFrames.frames.size() < 1)
+        {
+            return 1;
+        }
+        stackedFrames.removeSelectedFrame();
+        
+        refreshMorphingFrame();
+        
+        return 0;
+    }
+    
+    void setMorphingPos(float _pos)
+    {
+        pos = _pos;
+        //TableIds & Weightings ausrechnung & übergeben
+        refreshMorphingFrame();
+        
+    }
+};
+
+
 
 int calculate_split_freqs(std::vector<float> &split_freqs, float semitones = 2.f, float highest_split_freq = 22050.f, int lowest_split_freq = 5.f)
 {

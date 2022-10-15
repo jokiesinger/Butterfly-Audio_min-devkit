@@ -25,8 +25,8 @@ class stacked_tables : public object<stacked_tables>, public vector_operator<>, 
 {
 private:
 //    std::vector<Frame> frames;      //Das könnte auch ein Attribut werden
-    StackedFrames stackedFrames;
-    MorphableFrame morphable_frame;
+//    StackedFrames stackedFrames;
+    MorphableFrame morphableFrame;
     
     int selected_frame;
     int n_intervals;
@@ -37,11 +37,11 @@ private:
     float sampleRate{48000.f};
 
     float pos{1.f};
-    static constexpr int internal_tablesize{2048};
+    static constexpr int internalTablesize{2048};
     
     std::vector<float> split_freqs;
-    const Butterfly::FFTCalculator<float, internal_tablesize> fft_calculator;
-    Butterfly::MorpingWavetableOscillator<Butterfly::WavetableOscillator<Butterfly::Wavetable<float>>> morphingWavetableOscillator{sampleRate};
+    const Butterfly::FFTCalculator<float, internalTablesize> fft_calculator;
+//    Butterfly::MorpingWavetableOscillator<Butterfly::WavetableOscillator<Butterfly::Wavetable<float>>> morphingWavetableOscillator{sampleRate};
     
     Butterfly::RampedValue<float> morphingParam{1.f, 1000};   //Stimmt das mit UI überein?
     Butterfly::RampedValue<float> outputGain{0.f, 1000};
@@ -71,6 +71,7 @@ public:
     };
     
     //Members, whose state is addressable, queryable and saveable from Max
+
     attribute<color> background_color {this, "Background Color", color::predefined::gray, title {"Background Color"}};
     attribute<color> frame_color {this, "Frame Color", color::predefined::black};
     attribute<color> morphed_frame_color {this, "Morphed Frame Color", {1.f, 1.f, 1.f, 1.f}};
@@ -101,12 +102,18 @@ public:
     {
         this, "Export tablesize", 1048, description{"Default export tablesize."}
     };
-            
+    
+    attribute<double> oscillatorFreq
+    {
+        this, "Osc Freq", 80., description{"Oscillator Frequency."}
+    };
+         
+
     stacked_tables(const atoms& args = {}) : ui_operator::ui_operator {this, args}
     {
         n_intervals = calculate_split_freqs(split_freqs);
         
-        stackedFrames.init(maxFrames, sampleRate);
+        morphableFrame.stackedFrames.init(maxFrames);
         
 //        for (auto &frame : frames)
 //        {
@@ -126,7 +133,7 @@ public:
         MIN_FUNCTION {
             sampleRate = static_cast<float>(args[0]);
             
-            morphingWavetableOscillator.setSampleRate(sampleRate);
+            morphableFrame.init(sampleRate, internalTablesize, oscillatorFreq);
             
             cout << "dspsetup happend" << endl;
 
@@ -144,7 +151,7 @@ public:
             input_buffer.set(input_buffer_name);
             buffer_lock<> buf(input_buffer);
             auto chan = std::min<size_t>(m_channel - 1, buf.channel_count());
-            if (!(chan == 1))
+            if (buf.channel_count() != 1)
             {
                 cout << "Buffer channel count has to be one.\n";
                 return{};
@@ -154,7 +161,7 @@ public:
                 return{};
             }
             
-            if(!(buf.frame_count() == internal_tablesize))
+            if(!(buf.frame_count() == internalTablesize))
             {
                 cout << "Buffer size has to be 2048 samples.\n";
                 return{};
@@ -167,7 +174,7 @@ public:
             }
             
             int state;
-            state = stackedFrames.addFrame(data, sampleRate, split_freqs, fft_calculator);
+            state = morphableFrame.addFrame(data, sampleRate, split_freqs, fft_calculator);
             if (state == 0)
             {
                 cout << "Frame succesfully added.\n";
@@ -177,7 +184,7 @@ public:
                 cout << "Max frame count reached." << endl;
                 message_out.send("Max frame count reached");    //Das dem Nutzer prompten
             }
-            
+            redraw();
             return{};
         }
     };
@@ -186,7 +193,7 @@ public:
     {
         this, "flip_phase", MIN_FUNCTION
         {
-            stackedFrames.flipPhase(sampleRate, split_freqs, fft_calculator);
+            morphableFrame.stackedFrames.flipPhase(sampleRate, split_freqs, fft_calculator);
 
             redraw();
             
@@ -198,7 +205,7 @@ public:
     {
         this, "move_up_selected_frame", MIN_FUNCTION
         {
-            if (stackedFrames.moveFrontSelectedFrame() != 0)
+            if (morphableFrame.stackedFrames.moveFrontSelectedFrame() != 0)
             {
                 cout << "Can't move up selected frame.\n";
             }
@@ -212,7 +219,7 @@ public:
     {
         this, "move_down_selected_frame", MIN_FUNCTION
         {
-            if (stackedFrames.moveBackSelectedFrame() != 0)
+            if (morphableFrame.stackedFrames.moveBackSelectedFrame() != 0)
             {
                 cout << "Can't move down selected frame.\n";
             }
@@ -226,7 +233,7 @@ public:
     {
         this, "delete_selected_frame", MIN_FUNCTION
         {
-            if (stackedFrames.removeSelectedFrame() != 0)
+            if (morphableFrame.removeSelectedFrame() != 0)
             {
                 cout << "No frame to delete.\n";
             }
@@ -239,7 +246,7 @@ public:
     {
         this, "clear_all", MIN_FUNCTION
         {
-            stackedFrames.clearFrames();
+            morphableFrame.stackedFrames.clearFrames();
             
             redraw();
             
@@ -255,7 +262,7 @@ public:
             auto mouse_y = e.y();
             ///TODO: spacing Berechnung und Verwendung überprüfen
             int y_click = floor(mouse_y / (spacing + 1.f));
-            stackedFrames.selectFrame(y_click);
+            morphableFrame.stackedFrames.selectFrame(y_click);
             redraw();
             cout << "Selected Frame: " << y_click << endl;
             return{};
@@ -266,9 +273,8 @@ public:
     {
         this, "morph_position", MIN_FUNCTION
         {
-            pos = args[0];      //Range check
-            
-//            calculate_morphing_frame();
+            morphableFrame.setMorphingPos(static_cast<float>(args[0])); //Range check
+            redraw();
             
             return{};
         }
@@ -278,8 +284,8 @@ public:
     {
         this, "set_freq", MIN_FUNCTION
         {
-            float freq = static_cast<float>(args[0]);   ///Range clampen!
-            morphingWavetableOscillator.setFrequency(freq);
+            oscillatorFreq = static_cast<double>(args[0]);   ///Range clampen!
+            morphableFrame.morphingWavetableOscillator.setFrequency(oscillatorFreq);
             return{};
         }
     };
@@ -307,7 +313,7 @@ public:
         this, "export_table", MIN_FUNCTION
         {
             std::vector<float> stackedTable;
-            if (stackedFrames.getStackedTable(stackedTable, export_tablesize) != 0)
+            if (morphableFrame.stackedFrames.getStackedTable(stackedTable, export_tablesize) != 0)
             {
                 cout << "No table to export.\n";
             }
@@ -346,7 +352,7 @@ public:
             target t {args};
             float height = t.height() - margin;
             float width = t.width() - margin;
-            int nActiveFrames = stackedFrames.frames.size();
+            int nActiveFrames = morphableFrame.stackedFrames.frames.size();
             spacing = height / static_cast<float>(nActiveFrames);
             y_scaling = ((height - 10.f) / 2.f) / static_cast<float>(nActiveFrames);
             
@@ -364,6 +370,7 @@ public:
             return {};
         }
     };
+    ///TODO: Check und kann vrmtl. weg
     /*
     void calculate_morphing_frame()
     {
@@ -413,22 +420,22 @@ public:
     //Das ist hier ok -> Max spezifisch
     void drawStackedFrames(int f, target t)
     {
-        float y_offset = (spacing * static_cast<float>(stackedFrames.frames[f].position)) + (spacing / 2.f) + (margin / 2.f);
+        float y_offset = (spacing * static_cast<float>(morphableFrame.stackedFrames.frames[f].position)) + (spacing / 2.f) + (margin / 2.f);
         float stroke_width = 1.f;
-        if (stackedFrames.frames[f].is_selected){stroke_width = 2.f;};
+        if (morphableFrame.stackedFrames.frames[f].is_selected){stroke_width = 2.f;};
         float origin_x = margin / 2.f;
-        float origin_y = (stackedFrames.frames[f].samples[0] * y_scaling * -1.f) + y_offset;
+        float origin_y = (morphableFrame.stackedFrames.frames[f].samples[0] * y_scaling * -1.f) + y_offset;
         float position = 0.f;
         float width = t.width() - margin;
-        float frac = static_cast<float>(internal_tablesize) / width;
+        float frac = static_cast<float>(internalTablesize) / width;
         lib::interpolator::linear<> linear_interpolation;
         for (int i = 0; i < width; i++)
         {
             int lower_index = floor(position);
             int upper_index = ceil(position);
-            upper_index = upper_index > (internal_tablesize - 1) ? (internal_tablesize - 1) : upper_index;
+            upper_index = upper_index > (internalTablesize - 1) ? (internalTablesize - 1) : upper_index;
             float delta = position - static_cast<float>(lower_index);
-            float interpolated_value = linear_interpolation.operator()(stackedFrames.frames[f].samples[lower_index], stackedFrames.frames[f].samples[upper_index], delta);
+            float interpolated_value = linear_interpolation.operator()(morphableFrame.stackedFrames.frames[f].samples[lower_index], morphableFrame.stackedFrames.frames[f].samples[upper_index], delta);
             float y = (interpolated_value * y_scaling * -1.f) + y_offset;
             int x = i + static_cast<int>(margin / 2.f);
             line<stroke>
@@ -445,24 +452,25 @@ public:
         }
     }
     
+    ///TODO: Refactor!
     void draw_morphable_frame(target t)
     {
-        if (morphable_frame.is_visible)
+        if (morphableFrame.is_visible)
         {
             float origin_x = 0.f + (margin / 2.f);
-            float origin_y = (morphable_frame.samples[0] * y_scaling * -1.f) + morphable_frame.y_offset + (margin / 2.f);
+            float origin_y = (morphableFrame.morphingSamples[0] * y_scaling * -1.f) + morphableFrame.yOffset + (margin / 2.f);
             float position = 0.f;
             float width = t.width() - margin;
-            float frac = static_cast<float>(internal_tablesize) / width;
+            float frac = static_cast<float>(internalTablesize) / width;
             lib::interpolator::linear<> linear_interpolation;
             for (int i = 0; i < width; i++)
             {
                 int lower_index = floor(position);
                 int upper_index = ceil(position);
-                upper_index = upper_index > (internal_tablesize - 1) ? (internal_tablesize - 1) : upper_index;
+                upper_index = upper_index > (internalTablesize - 1) ? (internalTablesize - 1) : upper_index;
                 float delta = position - static_cast<float>(lower_index);
-                float interpolated_value = linear_interpolation.operator()(morphable_frame.samples[lower_index], morphable_frame.samples[upper_index], delta);
-                float y = (interpolated_value * y_scaling * -1.f) + morphable_frame.y_offset + (margin / 2.f);
+                float interpolated_value = linear_interpolation.operator()(morphableFrame.morphingSamples[lower_index], morphableFrame.morphingSamples[upper_index], delta);
+                float y = (interpolated_value * y_scaling * -1.f) + morphableFrame.yOffset + (margin / 2.f);
                 int x = i + static_cast<int>(margin / 2.f);
                 line<stroke>
                 {
@@ -486,8 +494,8 @@ public:
         auto out = output.samples(0);                          // get vector for channel 0 (first channel)
 
         for (auto i = 0; i < input.frame_count(); ++i) {
-            morphingWavetableOscillator.setParam(++morphingParam);
-            out[i]     = ++morphingWavetableOscillator * outputGain++;
+            morphableFrame.morphingWavetableOscillator.setParam(++morphingParam);
+            out[i]     = morphableFrame.morphingWavetableOscillator++ * outputGain++;
         }
     }
     
