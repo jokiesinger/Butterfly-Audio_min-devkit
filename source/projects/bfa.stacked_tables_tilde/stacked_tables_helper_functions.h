@@ -5,7 +5,8 @@
 //  Created by Jonas Kieser on 07.10.22.
 //
 
-#include "../../../submodules/Butterfly_Audio_Library/src/synth/src/wavetable_oscillator.h"
+#include <concepts>
+#include "wavetable_oscillator.h"
 
 struct Idcs
 {
@@ -13,15 +14,34 @@ struct Idcs
     int secondIdx{1};
 };
 
+template<int internal_tablesize>
+Frame createFrame(const std::vector<float>& data, float sampleRate, int pos, const std::vector<float>& split_freqs,
+	const Butterfly::FFTCalculator<float, internal_tablesize>& fft_calculator) {
+	Frame f;
+	f.is_empty    = false;
+	f.is_selected = true;
+	f.position    = pos;
+	f.samples     = data;
+	multitable.resize(split_freqs.size());
+	Butterfly::Antialiaser antialiaser {sampleRate, fft_calculator};
+	antialiaser.antialiase(samples.begin(), split_freqs.begin(), split_freqs.end(), multitable);
+	return frame;
+}
+
+
 //More object orientated, struct might be ok but more intelligent
 struct Frame
 {
+        
+    using Wavetable = Butterfly::Wavetable<float>>;
     bool is_empty{true};
     bool is_selected{false};
     std::vector<float> samples;     //rough data -> braucht es nicht zwingend
-    std::vector<Butterfly::Wavetable<float>> multitable;    //antialiased data
+    std::vector<Wavetable> multitable;     // antialiased data
     unsigned int position{};        //zero based counting
     
+
+    // weg
     template<int internal_tablesize>
     void create_multitable_from_samples(float sampleRate, const std::vector<float> &split_freqs, const Butterfly::FFTCalculator<float, internal_tablesize> &fft_calculator)
     {
@@ -29,13 +49,23 @@ struct Frame
         Butterfly::Antialiaser antialiaser{sampleRate, fft_calculator};
         antialiaser.antialiase(samples.begin(), split_freqs.begin(), split_freqs.end(), multitable);
     }
-    
-    void unselect()
+
+    // -> factory function
+	template<int internal_tablesize>
+	void init(const std::vector<float>& data, float sampleRate, int pos, const std::vector<float>& split_freqs,
+		const Butterfly::FFTCalculator<float, internal_tablesize>& fft_calculator) {
+		is_empty    = false;
+		is_selected = true;
+		position    = pos;
+		samples     = data;
+		create_multitable_from_samples(sampleRate, split_freqs, fft_calculator);
+	}
+    void unselect() // frame.is_selected = false
     {
         is_selected = false;
     }
     
-    void reset()
+    void reset() // -> frame = {};
     {
         is_selected = false;
         samples.clear();
@@ -43,6 +73,8 @@ struct Frame
         is_empty = true;
     }
     
+
+    // replace with operator*=(double) for wavetable
     template <int internal_tablesize>
     void flipPhase(float sampleRate, std::vector<float> &split_freqs, const Butterfly::FFTCalculator<float, internal_tablesize> &fft_calculator)
     {
@@ -63,36 +95,27 @@ struct Frame
         create_multitable_from_samples(sampleRate, split_freqs, fft_calculator);
     }
     
-    template<int internal_tablesize>
-    void init(const std::vector<float> &data, float sampleRate, int pos, const std::vector<float> &split_freqs, const Butterfly::FFTCalculator<float, internal_tablesize> &fft_calculator)
-    {
-        is_empty = false;
-        is_selected = true;
-        position = pos;
-        samples = data;
-        create_multitable_from_samples(sampleRate, split_freqs, fft_calculator);
-        
-    }
 };
+
 
 class StackedFrames
 {
 private:
 
 //    unsigned int internalTablesize{2048};
-    float sampleRate{};
-    std::vector<Butterfly::Wavetable<float>> wavetable;
-    Butterfly::WavetableOscillator<Butterfly::Wavetable<float>> wavetableOscillator;
+    float sampleRate{}; // kann weg
     
-    template<int internal_tablesize>
-    Frame createFrame(const std::vector<float> &data, float sampleRate, const std::vector<float> &split_freqs, const Butterfly::FFTCalculator<float, internal_tablesize> &fft_calculator)
-    {
-        Frame frame;
-        unselectAllFrames();
-        frame.init(data, sampleRate, static_cast<int>(frames.size()), split_freqs, fft_calculator);
-        
-        return frame;
-    }
+
+    // redundant
+    //template<int internal_tablesize>
+    //Frame createFrame(const std::vector<float> &data, float sampleRate, const std::vector<float> &split_freqs, const Butterfly::FFTCalculator<float, internal_tablesize> &fft_calculator)
+    //{
+    //    Frame frame;
+    //    unselectAllFrames();
+    //    frame.init(data, sampleRate, static_cast<int>(frames.size()), split_freqs, fft_calculator);
+    //    
+    //    return frame;
+    //}
     
     void unselectAllFrames()
     {
@@ -104,6 +127,7 @@ private:
     
     int getSelectedFrameIdx()
     {
+
         int selectedFrameIdx{};
         for (int i = 0; i < frames.size(); i++)
         {
@@ -120,6 +144,7 @@ private:
 public:
     unsigned int maxFrames{0};
     std::vector<Frame> frames;
+
     //MorphableFrame morphableFrame;
     
     StackedFrames() = default;
@@ -138,8 +163,9 @@ public:
         if (frames.size() >= maxFrames)
         {
             return 1;
-        }
-        frames.push_back(createFrame(data, sampleRate, split_freqs, fft_calculator));
+		}
+		unselectAllFrames();
+        frames.push_back(createFrame(data, sampleRate, split_freqs, fft_calculator)); // use global factory function
 //        internalTablesize = internal_tablesize;
         
         return 0;
@@ -170,7 +196,8 @@ public:
         frames[idx].is_selected = true;
     }
     
-    int moveFrontSelectedFrame()
+
+    int moveUpSelectedFrame()    // -> return type bool
     {
         int selectedFrameIdx = getSelectedFrameIdx();
         
@@ -178,7 +205,8 @@ public:
         {
             return 1;
         }
-        
+
+		// swap
         Frame tempFrame = frames[selectedFrameIdx];
         frames[selectedFrameIdx] = frames[selectedFrameIdx - 1];
         frames[selectedFrameIdx].position += 1;
@@ -188,7 +216,7 @@ public:
         return 0;
     }
     
-    int moveBackSelectedFrame()
+    int moveDownSelectedFrame()    // -> return type bool
     {
         int selectedFrameIdx = getSelectedFrameIdx();
         
@@ -197,6 +225,7 @@ public:
             return 1;
         }
         
+        //swap
         Frame tempFrame = frames[selectedFrameIdx];
         frames[selectedFrameIdx] = frames[selectedFrameIdx + 1];
         frames[selectedFrameIdx].position -= 1;
@@ -206,36 +235,43 @@ public:
         return 0;
     }
     
-    int removeSelectedFrame()
+    int removeSelectedFrame() // -> return type bool
     {
         int selectedFrameIdx = getSelectedFrameIdx();
         
         frames.erase(frames.begin() + selectedFrameIdx);
         unselectAllFrames();    //Unnötig?
-        frames[selectedFrameIdx].is_selected = true;
-        for (int i = selectedFrameIdx; i < frames.size(); i++)
-        {
-            frames[i].position -= 1;
-        }
+        frames[selectedFrameIdx].is_selected = true; /// Oh oh oh !!!!!!!!!!!!!!!
+        //for (int i = selectedFrameIdx; i < frames.size(); i++)
+        //{
+        //    frames[i].position -= 1;
+        //}
         
         return 0;
     }
     
-    int getStackedTable(std::vector<float> &stackedTable, int exportTablesize)
+    int getStackedTable(std::vector<float>& stackedTable, int exportTablesize, float samplerate)    // -> return type bool
     {
         if (frames.size() <= 0)
         {
             return 1;
-        }
-        wavetableOscillator.setSampleRate(sampleRate);
+	     }
+
+        
+    using Wavetable = typename Frame::Wavetable;
+    using Osc = Butterfly::WavetableOscillator<Wavetable>;
+        // -> local oscillator
+		 Osc wavetableOscillator(samplerate);
+	std::vector<Wavetable> wavetable;
+
         float exportTableOscFreq = sampleRate / static_cast<float>(exportTablesize);
         wavetableOscillator.setFrequency(exportTableOscFreq);
-        for (int i = 0; i < frames.size(); i++)
+        for (const auto& frame : frames) // (double for looop with i)
         {
-            Butterfly::Wavetable<float> table;
-            table.setData(frames[i].samples, sampleRate / 2.f);
-            wavetable.push_back(table);
-            wavetableOscillator.setTable(&wavetable);
+            Butterfly::Wavetable<float> table {frame.samples, sampleRate / 2.f};
+
+            std::vector<Butterfly::Wavetable<float>> wavetable {table};
+			wavetableOscillator.setTable(&wavetable); // probably works like this. "{}" will create a vector because that is what is exoected
             std::vector<float> interpolatedTable;
             for (int i = 0; i < exportTablesize; i++)
             {
@@ -250,6 +286,7 @@ public:
 };
 
 //Sollte das nicht besser von StackedFrames erben?
+
 class MorphableFrame
 {
 private:
@@ -272,18 +309,21 @@ public:
     
     MorphableFrame() = default;
     
-    StackedFrames stackedFrames{};        //Factory Function?
+    StackedFrames stackedFrames{};        //Factory Function? // composition!! very good job
     
-    Butterfly::MorpingWavetableOscillator<Butterfly::WavetableOscillator<Butterfly::Wavetable<float>>> morphingWavetableOscillator{};
+    using Wavetable = typename Frame::Wavetable;
+    using Osc = Butterfly::WavetableOscillator<Wavetable>;
+    using MorpingOsc = Butterfly::MorpingWavetableOscillator<Osc>;
+	MorpingOsc morphingWavetableOscillator {}; // rename -> osc
     
     std::vector<float> morphingSamples;     //for graphics
     bool is_visible{false};
-    float yOffset;
-    float yScaling;
+    float yOffset{};
+    float yScaling{1.};
     
     std::vector<float> zeroData;
-    Butterfly::Wavetable<float> zeroTable;
-    std::vector<Butterfly::Wavetable<float>> zeroWavetable;
+    Wavetable zeroTable;
+	std::vector<Wavetable> zeroWavetable;
         
     unsigned int firstFrameIdx{0};  //reference to frames.samples[i]
     unsigned int secondFrameIdx{1};

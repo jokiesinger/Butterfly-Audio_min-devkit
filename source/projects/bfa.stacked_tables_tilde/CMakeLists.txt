@@ -22,6 +22,7 @@ include_directories(
 
 set( SOURCE_FILES
 	${PROJECT_NAME}.cpp
+	stacked_tables_helper_functions.h
 )
 
 #set(CMAKE_CXX_STANDARD 20)
@@ -34,9 +35,11 @@ add_library(
 )
 
 #Add library to executable?
+
+include(${C74_MIN_API_DIR}/script/min-posttarget.cmake)
 target_link_libraries(
 		${PROJECT_NAME}
-		INTERFACE
+	PRIVATE
 		wave
 		synth
 		math
@@ -44,8 +47,8 @@ target_link_libraries(
 		modulation
 )
 
-include(${C74_MIN_API_DIR}/script/min-posttarget.cmake)
-
+set_target_properties(${PROJECT_NAME} PROPERTIES CMAKE_CXX_STANDARD 20)
+set_target_properties(${PROJECT_NAME} PROPERTIES CMAKE_CXX_STANDARD_REQUIRED True)
 
 #############################################################
 # UNIT TEST
