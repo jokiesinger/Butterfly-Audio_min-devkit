@@ -5,7 +5,6 @@
 //  Created by Jonas Kieser on 07.10.22.
 //
 
-#include <concepts>
 #include "wavetable_oscillator.h"
 
 struct Idcs
@@ -14,26 +13,13 @@ struct Idcs
     int secondIdx{1};
 };
 
-template<int internal_tablesize>
-Frame createFrame(const std::vector<float>& data, float sampleRate, int pos, const std::vector<float>& split_freqs,
-	const Butterfly::FFTCalculator<float, internal_tablesize>& fft_calculator) {
-	Frame f;
-	f.is_empty    = false;
-	f.is_selected = true;
-	f.position    = pos;
-	f.samples     = data;
-	multitable.resize(split_freqs.size());
-	Butterfly::Antialiaser antialiaser {sampleRate, fft_calculator};
-	antialiaser.antialiase(samples.begin(), split_freqs.begin(), split_freqs.end(), multitable);
-	return frame;
-}
 
 
 //More object orientated, struct might be ok but more intelligent
 struct Frame
 {
         
-    using Wavetable = Butterfly::Wavetable<float>>;
+    using Wavetable = Butterfly::Wavetable<float>;
     bool is_empty{true};
     bool is_selected{false};
     std::vector<float> samples;     //rough data -> braucht es nicht zwingend
@@ -78,6 +64,8 @@ struct Frame
     template <int internal_tablesize>
     void flipPhase(float sampleRate, std::vector<float> &split_freqs, const Butterfly::FFTCalculator<float, internal_tablesize> &fft_calculator)
     {
+		for_each(multitable.begin(), multitable.end(), [](auto& table) { table *= -1.f; });
+		for_each(samples.begin(), samples.end(), [](auto& value) { value *= -1.f; });
         for (float &sample : samples)
         {
             sample *= -1.f;
@@ -91,12 +79,24 @@ struct Frame
 //            }
 //        }
         //Noch umständlicher
-        multitable.clear();
-        create_multitable_from_samples(sampleRate, split_freqs, fft_calculator);
+        //multitable.clear();
+        //create_multitable_from_samples(sampleRate, split_freqs, fft_calculator);
     }
     
 };
 
+template<int internal_tablesize>
+Frame createFrame(const std::vector<float>& data, float sampleRate, const std::vector<float>& split_freqs,
+	const Butterfly::FFTCalculator<float, internal_tablesize>& fft_calculator) {
+	Frame frame;
+	frame.is_empty    = false;
+	frame.is_selected = true;
+	frame.samples     = data;
+	frame.multitable.resize(split_freqs.size());
+	Butterfly::Antialiaser antialiaser {sampleRate, fft_calculator};
+	antialiaser.antialiase(data.begin(), split_freqs.begin(), split_freqs.end(), frame.multitable);
+	return frame;
+}
 
 class StackedFrames
 {

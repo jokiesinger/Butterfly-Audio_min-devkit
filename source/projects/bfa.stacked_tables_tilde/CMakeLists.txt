@@ -25,8 +25,6 @@ set( SOURCE_FILES
 	stacked_tables_helper_functions.h
 )
 
-#set(CMAKE_CXX_STANDARD 20)
-#set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 add_library( 
 	${PROJECT_NAME} 
@@ -44,11 +42,10 @@ target_link_libraries(
 		synth
 		math
 		utilities
-		modulation
 )
 
-set_target_properties(${PROJECT_NAME} PROPERTIES CMAKE_CXX_STANDARD 20)
-set_target_properties(${PROJECT_NAME} PROPERTIES CMAKE_CXX_STANDARD_REQUIRED True)
+set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 20)
+set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD_REQUIRED True)
 
 #############################################################
 # UNIT TEST

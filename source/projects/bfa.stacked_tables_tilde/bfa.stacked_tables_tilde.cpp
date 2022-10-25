@@ -6,13 +6,8 @@
 
 #include "c74_min.h"
 
-#include "../../../submodules/Butterfly_Audio_Library/src/wave/src/antialiase.h"
-#include "../../../submodules/Butterfly_Audio_Library/src/wave/src/waveform_processing.h"
-#include "../../../submodules/Butterfly_Audio_Library/src/synth/src/wavetable_oscillator.h"
-#include "../../../submodules/Butterfly_Audio_Library/src/utilities/src/ramped_value.h"
-//#include "antialiase.h"
-//#include "waveform_processing.h"
-//#include "wavetable_oscillator.h"
+#include "waveform_processing.h"
+#include "ramped_value.h"
 
 #include "stacked_tables_helper_functions.h"
 
@@ -194,18 +189,15 @@ public:
         this, "flip_phase", MIN_FUNCTION
         {
             morphableFrame.stackedFrames.flipPhase(sampleRate, split_freqs, fft_calculator);
-
             redraw();
-            
             return{};
         }
     };
     
-    message<> move_up_selected_frame
-    {
+    message<> move_up_selected_frame    {
         this, "move_up_selected_frame", MIN_FUNCTION
         {
-            if (morphableFrame.stackedFrames.moveFrontSelectedFrame() != 0)
+            if (morphableFrame.stackedFrames.moveUpSelectedFrame() != 0)
             {
                 cout << "Can't move up selected frame.\n";
             }
@@ -219,7 +211,7 @@ public:
     {
         this, "move_down_selected_frame", MIN_FUNCTION
         {
-            if (morphableFrame.stackedFrames.moveBackSelectedFrame() != 0)
+            if (morphableFrame.stackedFrames.moveDownSelectedFrame() != 0)
             {
                 cout << "Can't move down selected frame.\n";
             }
@@ -313,7 +305,7 @@ public:
         this, "export_table", MIN_FUNCTION
         {
             std::vector<float> stackedTable;
-            if (morphableFrame.stackedFrames.getStackedTable(stackedTable, export_tablesize) != 0)
+            if (morphableFrame.stackedFrames.getStackedTable(stackedTable, export_tablesize, 44100) != 0)
             {
                 cout << "No table to export.\n";
             }
