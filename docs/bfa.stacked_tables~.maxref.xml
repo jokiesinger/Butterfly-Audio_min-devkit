@@ -31,6 +31,11 @@
 
 	<methodlist>
 
+		<method name='set_export_tablesize'>
+			<digest></digest>
+			<description></description>
+		</method>
+
 		<method name='set_output_gain'>
 			<digest></digest>
 			<description></description>
@@ -41,17 +46,7 @@
 			<description></description>
 		</method>
 
-		<method name='move_down_selected_frame'>
-			<digest></digest>
-			<description></description>
-		</method>
-
-		<method name='export_table'>
-			<digest></digest>
-			<description></description>
-		</method>
-
-		<method name='set_export_tablesize'>
+		<method name='morph_position'>
 			<digest></digest>
 			<description></description>
 		</method>
@@ -61,7 +56,17 @@
 			<description></description>
 		</method>
 
-		<method name='morph_position'>
+		<method name='export_table'>
+			<digest></digest>
+			<description></description>
+		</method>
+
+		<method name='move_down_selected_frame'>
+			<digest></digest>
+			<description></description>
+		</method>
+
+		<method name='flip_phase'>
 			<digest></digest>
 			<description></description>
 		</method>
@@ -81,11 +86,6 @@
 			<description></description>
 		</method>
 
-		<method name='flip_phase'>
-			<digest></digest>
-			<description></description>
-		</method>
-
 		<method name='set'>
 			<digest>Choose a named buffer~ from which to read</digest>
 			<description>Choose a named buffer~ from which to read. </description>
@@ -98,14 +98,14 @@
 
 	<attributelist>
 
+		<attribute name='Osc Freq' get='1' set='1' type='float64' size='1' >
+			<digest>Oscillator Frequency</digest>
+			<description>Oscillator Frequency. </description>
+		</attribute>
+
 		<attribute name='Export tablesize' get='1' set='1' type='long' size='1' >
 			<digest>Default export tablesize</digest>
 			<description>Default export tablesize. </description>
-		</attribute>
-
-		<attribute name='Max stacked Frames' get='1' set='1' type='long' size='1' >
-			<digest>Maximum number of possible stacked frames</digest>
-			<description>Maximum number of possible stacked frames. Has to match number of stacked_frames_buffer channels. </description>
 		</attribute>
 
 		<attribute name='Input Buffer' get='1' set='1' type='symbol' size='1' >
