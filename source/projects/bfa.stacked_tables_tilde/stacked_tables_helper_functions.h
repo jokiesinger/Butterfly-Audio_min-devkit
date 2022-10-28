@@ -10,13 +10,6 @@
 #include "ramped_value.h"
 #include <cmath>
 
-
-struct Idcs
-{
-    int firstIdx{0};
-    int secondIdx{1};
-};
-
 struct Frame
 {
     using Wavetable = Butterfly::Wavetable<float>;
@@ -27,7 +20,6 @@ struct Frame
     std::vector<float> samples;     //rough data -> braucht es nicht zwingend
     std::vector<Wavetable> multitable;    //antialiased data
     
-    //TODO: flipPhase() with operator *= for wavetable -> update Lib
     void flipPhase() {
         for (auto &wavetable : multitable) {
             wavetable *= -1.f;
@@ -194,8 +186,10 @@ public:
     float firstFrameWeighting{1.f};
     float secondFrameWeighting{0.f};
     
+    Butterfly::RampedValue<float> morphingParam{1.f, 1000};
+    
     //Constructor inits Osc with zero tables to prevent assert
-    MultiFrameOsc() = default;
+//    MultiFrameOsc() = default;
     
     MultiFrameOsc(float sampleRate, int internalTablesize, float oscFreq, int maxFrames) {
         zeroData.resize(internalTablesize, 0.f);
@@ -214,24 +208,24 @@ public:
     };
 
     //returns success, false if maxFrames reached
-    template<int internalTablesize, class RampedValue>
-    bool addFrame(const std::vector<float> &data, float sampleRate, const std::vector<float> &splitFreqs, const Butterfly::FFTCalculator<float, internalTablesize> &fftCalculator, RampedValue &morphingParam) {
+    template<int internalTablesize>
+    bool addFrame(const std::vector<float> &data, float sampleRate, const std::vector<float> &splitFreqs, const Butterfly::FFTCalculator<float, internalTablesize> &fftCalculator) {
         //TODO: doppelt!
         if (stackedFrames.frames.size() >= stackedFrames.maxFrames) {
             return false;
         }
         stackedFrames.addFrame(data, sampleRate, splitFreqs, fftCalculator);
-        calculateIds(morphingParam);
+        calculateIds();
         setVisibility();
         return true;
     }
     
-    void setPos(float _pos, Butterfly::RampedValue<float> &morphingParam) {
+    void setPos(float _pos) {
         pos = _pos;
-        calculateIds(morphingParam);
+        calculateIds();
     }
     
-    void calculateIds(Butterfly::RampedValue<float> &morphingParam) {
+    void calculateIds() {
         if (stackedFrames.frames.size() < 1) {
             isVisible = false;  //setVisibility redundant?
             firstFrameIdx = 0;
@@ -248,6 +242,10 @@ public:
             initOscOneFrame();
         } else {
             float scaledPos = pos * static_cast<float>(stackedFrames.frames.size() - 1); //Scale position to frame count
+            struct Idcs {
+                int firstIdx{0}, secondIdx{1};
+            };
+//            std::pair<int> tempIdcs;
             Idcs tempIdcs;
             tempIdcs.firstIdx = floor(scaledPos);    //Können auch gleich sein!
             tempIdcs.secondIdx = ceil(scaledPos);
@@ -258,7 +256,7 @@ public:
             //Switch case group better?
             if (tempIdcs.firstIdx == firstFrameIdx) {
                 secondFrameIdx = tempIdcs.secondIdx;
-                firstFrameWeighting = (1.f - fracPos);
+                firstFrameWeighting = (1.f - fracPos);  //einmalig ausrechnen
                 secondFrameWeighting = (fracPos);
             }
             else if (tempIdcs.firstIdx == secondFrameIdx) {
@@ -283,23 +281,29 @@ public:
 //            Osc.setParam(secondFrameWeighting);
             morphingParam.set(secondFrameWeighting);
             
-//            std::cout << "fracPos:              " << fracPos << std::endl;
-//            std::cout << "tempFirstIdx:         " << tempIdcs.firstIdx << std::endl;
-//            std::cout << "tempSecondIdx:        " << tempIdcs.secondIdx << std::endl;
-//            std::cout << "firstFrameIdx:        " << firstFrameIdx << std::endl;
-//            std::cout << "secondFrameIdx:       " << secondFrameIdx << std::endl;
-//            std::cout << "firstFrameWeighting:  " << firstFrameWeighting << std::endl;
-//            std::cout << "secondFrameWeighting: " << secondFrameWeighting << std::endl;
+            std::cout << "fracPos:              " << fracPos << std::endl;
+            std::cout << "tempFirstIdx:         " << tempIdcs.firstIdx << std::endl;
+            std::cout << "tempSecondIdx:        " << tempIdcs.secondIdx << std::endl;
+            std::cout << "firstFrameIdx:        " << firstFrameIdx << std::endl;
+            std::cout << "secondFrameIdx:       " << secondFrameIdx << std::endl;
+            std::cout << "firstFrameWeighting:  " << firstFrameWeighting << std::endl;
+            std::cout << "secondFrameWeighting: " << secondFrameWeighting << std::endl;
             updateMorphingSamples();
         }
     }
+    
+    //process() -> handelt morphingParam und Osc update
+    constexpr float operator++() {
+        Osc.setParam(++morphingParam);
+        return ++Osc;;
+    }
+
     
     void updateMorphingSamples() {
         for (int i = 0; i < morphingSamples.size(); i++) {
             morphingSamples[i] = stackedFrames.frames[firstFrameIdx].samples[i] * firstFrameWeighting + stackedFrames.frames[secondFrameIdx].samples[i] * secondFrameWeighting;
         }
     }
-    
 };
 
 int calculateSplitFreqs(std::vector<float> &splitFreqs, float semitones = 2.f, float highestSplitFreq = 22050.f, int lowestSplitFreq = 5.f) {

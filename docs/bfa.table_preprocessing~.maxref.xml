@@ -42,8 +42,8 @@
 		</method>
 
 		<method name='set_mode'>
-			<digest>Set frame selection mode</digest>
-			<description>Set frame selection mode. 0: Period, 1: Custom. </description>
+			<digest>Set frame selection mode (custom, period)</digest>
+			<description>Set frame selection mode (custom, period). </description>
 		</method>
 
 		<method name='set'>

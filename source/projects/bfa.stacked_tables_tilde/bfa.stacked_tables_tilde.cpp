@@ -6,10 +6,6 @@
 
 #include "c74_min.h"
 
-//#include "../../../submodules/Butterfly_Audio_Library/src/wave/src/antialiase.h"
-//#include "../../../submodules/Butterfly_Audio_Library/src/wave/src/waveform_processing.h"
-//#include "../../../submodules/Butterfly_Audio_Library/src/synth/src/wavetable_oscillator.h"
-//#include "../../../submodules/Butterfly_Audio_Library/src/utilities/src/ramped_value.h"
 #include "antialiase.h"
 #include "waveform_processing.h"
 #include "wavetable_oscillator.h"
@@ -41,8 +37,7 @@ private:
     const Butterfly::FFTCalculator<float, internalTablesize> fftCalculator;
     
     MultiFrameOsc multiFrameOsc;
-    
-    Butterfly::RampedValue<float> morphingParam{1.f, 1000};
+
     Butterfly::RampedValue<float> outputGain{0.f, 1000};
     
 public:
@@ -107,9 +102,9 @@ public:
     };
          
 
-    stacked_tables(const atoms& args = {}) : ui_operator::ui_operator {this, args}
+    stacked_tables(const atoms& args = {}) : ui_operator::ui_operator {this, args}, multiFrameOsc{sampleRate, internalTablesize, oscFreq, maxFrames}
     {
-        multiFrameOsc = {sampleRate, internalTablesize, oscFreq, maxFrames};
+//        multiFrameOsc = {sampleRate, internalTablesize, oscFreq, maxFrames};
         nIntervalls = calculateSplitFreqs(splitFreqs);
     }
     
@@ -143,7 +138,8 @@ public:
             for (auto i = 0; i < buf.frame_count(); i++){         //Get samples
                 data.push_back(buf.lookup(i, chan));
             }
-            if (multiFrameOsc.addFrame(data, sampleRate, splitFreqs, fftCalculator, morphingParam)){
+            
+            if (multiFrameOsc.addFrame(data, sampleRate, splitFreqs, fftCalculator)){
                 cout << "Frame succesfully added.\n";
             } else {
                 cout << "Max frame count reached." << endl;
@@ -169,7 +165,7 @@ public:
             {
                 cout << "Can't move up selected frame.\n";
             } else {
-                multiFrameOsc.calculateIds(morphingParam);
+                multiFrameOsc.calculateIds();
             }
             redraw();
             return {};
@@ -181,7 +177,7 @@ public:
             if (!multiFrameOsc.stackedFrames.moveDownSelectedFrame()) {
                 cout << "Can't move down selected frame.\n";
             } else {
-                multiFrameOsc.calculateIds(morphingParam);
+                multiFrameOsc.calculateIds();
             }
             redraw();
             return{};
@@ -193,7 +189,7 @@ public:
             if (!multiFrameOsc.stackedFrames.removeSelectedFrame()) {
                 cout << "No frame to delete.\n";
             } else {
-                multiFrameOsc.calculateIds(morphingParam);
+                multiFrameOsc.calculateIds();
             }
             redraw();
             return {};
@@ -223,7 +219,7 @@ public:
     
     message<> morph_position {
         this, "morph_position", MIN_FUNCTION {
-            multiFrameOsc.setPos(std::clamp(static_cast<float>(args[0]), 0.f, 1.f), morphingParam);
+            multiFrameOsc.setPos(std::clamp(static_cast<float>(args[0]), 0.f, 1.f));
             redraw();
             return{};
         }
@@ -370,8 +366,7 @@ public:
         auto out = output.samples(0);                          // get vector for channel 0 (first channel)
 
         for (auto i = 0; i < input.frame_count(); ++i) {
-            multiFrameOsc.Osc.setParam(++morphingParam);    //Muss das so?
-            out[i] = multiFrameOsc.Osc++ * outputGain++;
+            out[i] = ++multiFrameOsc * outputGain++;
         }
     }
 };

@@ -31,6 +31,8 @@ class InputSamplesAnalysis {
         - custom (Klick - drag - mouseUp markiert den Bereich, ausgewählte Samples fett)
         -> braucht es ein rechteckiges Overlay überhaupt?
      
+     Reinzoomen mit Kyanos' Transformationen
+     
      Klasse handelt auch die Interpolation in den outputBuffer
      */
     
