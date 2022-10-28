@@ -1,7 +1,7 @@
 # Copyright 2018 The Min-DevKit Authors. All rights reserved.
 # Use of this source code is governed by the MIT License found in the License.md file.
 
-cmake_minimum_required(VERSION 3.0)
+cmake_minimum_required(VERSION 3.19)
 
 set(C74_MIN_API_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../min-api)
 include(${C74_MIN_API_DIR}/script/min-pretarget.cmake)
@@ -19,6 +19,7 @@ include_directories(
 
 set( SOURCE_FILES
 	${PROJECT_NAME}.cpp
+	table_preprocessing_helper_functions.h
 )
 
 
@@ -28,17 +29,19 @@ add_library(
 	${SOURCE_FILES}
 )
 
-#Add library to executable?
-target_link_libraries(	${PROJECT_NAME}
-		INTERFACE
+include(${C74_MIN_API_DIR}/script/min-posttarget.cmake)
+
+target_link_libraries(
+		${PROJECT_NAME}
+	PRIVATE
 		wave
 		synth
 		math
 		utilities
-		modulation
 )	
 
-include(${C74_MIN_API_DIR}/script/min-posttarget.cmake)
+set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 20)
+set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD_REQUIRED True)
 
 
 #############################################################

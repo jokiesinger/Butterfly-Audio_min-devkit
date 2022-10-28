@@ -42,7 +42,7 @@ private:
     
     MultiFrameOsc multiFrameOsc;
     
-    Butterfly::RampedValue<float> morphingParam{1.f, 1000};   //Stimmt das mit UI überein?
+    Butterfly::RampedValue<float> morphingParam{1.f, 1000};
     Butterfly::RampedValue<float> outputGain{0.f, 1000};
     
 public:
@@ -68,8 +68,6 @@ public:
             return {};
         }
     };
-    
-    //Members, whose state is addressable, queryable and saveable from Max
 
     attribute<color> background_color {this, "Background Color", color::predefined::gray, title {"Background Color"}};
     attribute<color> frame_color {this, "Frame Color", color::predefined::black};
@@ -85,7 +83,7 @@ public:
     attribute<symbol> output_buffer_name
     {
         this, "Export Buffer", "output_buffer", description {"Name of buffer~ to write to."}
-    };          //Kann ich keine MIN_FUNCTION aus dem attribute raus ausrufen? Evtl. im Konstruktor? Oder einfach nach der attribute initialisation?
+    };
     
     attribute<symbol> input_buffer_name
     {
@@ -136,9 +134,7 @@ public:
                 cout << "Buffer channel count has to be one.\n";
                 return{};
             }
-            if (!buf.valid()) {
-                return{};
-            }
+            if (!buf.valid()) { return{}; }
             if(!(buf.frame_count() == internalTablesize)) {
                 cout << "Buffer size has to be 2048 samples.\n";
                 return{};
@@ -147,7 +143,6 @@ public:
             for (auto i = 0; i < buf.frame_count(); i++){         //Get samples
                 data.push_back(buf.lookup(i, chan));
             }
-            
             if (multiFrameOsc.addFrame(data, sampleRate, splitFreqs, fftCalculator, morphingParam)){
                 cout << "Frame succesfully added.\n";
             } else {
@@ -296,13 +291,11 @@ public:
             };
             
             for (int i = 0; i < nActiveFrames; i++) { drawStackedFrames(i, t); }
-            //Draw active frames, könnte man mit nem if kombinieren, um nicht bei jedem neuen Morph-Frame zu zeichnen?
             draw_morphable_frame(t);
             return {};
         }
     };
      
-    //Das ist hier ok -> Max spezifisch
     void drawStackedFrames(int f, target t) {
         yOffset = (spacing * static_cast<float>(f)) + (spacing / 2.f) + (margin / 2.f);
         float stroke_width = 1.f;
@@ -377,11 +370,10 @@ public:
         auto out = output.samples(0);                          // get vector for channel 0 (first channel)
 
         for (auto i = 0; i < input.frame_count(); ++i) {
-            multiFrameOsc.Osc.setParam(++morphingParam);
+            multiFrameOsc.Osc.setParam(++morphingParam);    //Muss das so?
             out[i] = multiFrameOsc.Osc++ * outputGain++;
         }
     }
-    
 };
 
 MIN_EXTERNAL(stacked_tables);
