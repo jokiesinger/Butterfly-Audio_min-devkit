@@ -5,10 +5,28 @@
 //  Created by Jonas Kieser on 07.10.22.
 //
 
+#include "waveform_processing.h"
+
 struct OverlayRect {
-    int x{0}, y{0};
-    float width{0.f}, height{0.f};
+    int x1{}, x2{};
+//    int width{};
     bool visible{false};
+    
+    int getWidth() {
+        return std::abs(x2 - x1);
+    }
+    
+    int getStartX() {
+        int startX = (x1 <= x2) ? x1 : x2;
+        return startX;
+    }
+    
+    std::pair<int, int> getBounds() {
+        std::pair<int, int> bounds;
+        bounds.first = (x1 <= x2) ? x1 : x2;
+        bounds.second = (x2 >= x1) ? x2 : x1;
+        return bounds;
+    }
 };
 
 struct SampleSelection {
@@ -17,7 +35,14 @@ struct SampleSelection {
     float selectedZeroCrossing{};
 };
 
-class InputSamplesAnalysis {
+struct TablePreprocessor {
+    std::vector<float> inputSamples{};
+    std::vector<double> zeroCrossings{};
+    
+    void analyzeZeroCrossings() {
+        zeroCrossings = Butterfly::getCrossings<std::vector<float>::iterator>(inputSamples.begin(), inputSamples.end());
+    }
+    
     /*
      Klasse könnte input Samples halten, ZeroCrossing Analysen und Pitch Detection durchführen
      Nachricht: "Analysing Input Samples" für die Dauer der Pitch Detection (graphic ausgegraut und nicht klickbar)
