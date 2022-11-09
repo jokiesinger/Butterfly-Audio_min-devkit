@@ -21,12 +21,12 @@ struct OverlayRect {
         return startX;
     }
     
-    std::pair<int, int> getBounds() {
-        std::pair<int, int> bounds;
-        bounds.first = (x1 <= x2) ? x1 : x2;
-        bounds.second = (x2 >= x1) ? x2 : x1;
-        return bounds;
-    }
+//    std::pair<int, int> getBounds() {
+//        std::pair<int, int> bounds;
+//        bounds.first = (x1 <= x2) ? x1 : x2;
+//        bounds.second = (x2 >= x1) ? x2 : x1;
+//        return bounds;
+//    }
 };
 
 struct SampleSelection {

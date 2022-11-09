@@ -281,13 +281,13 @@ public:
 //            Osc.setParam(secondFrameWeighting);
             morphingParam.set(secondFrameWeighting);
             
-            std::cout << "fracPos:              " << fracPos << std::endl;
-            std::cout << "tempFirstIdx:         " << tempIdcs.firstIdx << std::endl;
-            std::cout << "tempSecondIdx:        " << tempIdcs.secondIdx << std::endl;
-            std::cout << "firstFrameIdx:        " << firstFrameIdx << std::endl;
-            std::cout << "secondFrameIdx:       " << secondFrameIdx << std::endl;
-            std::cout << "firstFrameWeighting:  " << firstFrameWeighting << std::endl;
-            std::cout << "secondFrameWeighting: " << secondFrameWeighting << std::endl;
+//            std::cout << "fracPos:              " << fracPos << std::endl;
+//            std::cout << "tempFirstIdx:         " << tempIdcs.firstIdx << std::endl;
+//            std::cout << "tempSecondIdx:        " << tempIdcs.secondIdx << std::endl;
+//            std::cout << "firstFrameIdx:        " << firstFrameIdx << std::endl;
+//            std::cout << "secondFrameIdx:       " << secondFrameIdx << std::endl;
+//            std::cout << "firstFrameWeighting:  " << firstFrameWeighting << std::endl;
+//            std::cout << "secondFrameWeighting: " << secondFrameWeighting << std::endl;
             updateMorphingSamples();
         }
     }

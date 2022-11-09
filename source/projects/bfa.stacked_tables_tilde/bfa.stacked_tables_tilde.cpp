@@ -57,8 +57,8 @@ public:
         }
     };
     
-    buffer_reference output_buffer { this,                   //Constructor of buffer reference before input_buffer_name attribute
-        MIN_FUNCTION {                                      // will receive a symbol arg indicating 'binding', 'unbinding', or 'modified'
+    buffer_reference output_buffer {
+        this, MIN_FUNCTION {
             message_out.send(args);
             return {};
         }
@@ -68,21 +68,18 @@ public:
     attribute<color> frame_color {this, "Frame Color", color::predefined::black};
     attribute<color> morphed_frame_color {this, "Morphed Frame Color", {1.f, 1.f, 1.f, 1.f}};
     
-    attribute<int, threadsafe::no, limit::clamp> m_channel
-    {
+    attribute<int, threadsafe::no, limit::clamp> m_channel {
         this, "Channel", 1,
         description {"Channel to read from the buffer~. The channel number uses 1-based counting."},
         range {1, buffer_reference::k_max_channels}
     };
     
-    attribute<symbol> output_buffer_name
-    {
-        this, "Export Buffer", "output_buffer", description {"Name of buffer~ to write to."}
+    attribute<symbol> output_buffer_name {
+        this, "Export Buffer", "outputBuffer", description {"Name of buffer~ to write to."}
     };
     
-    attribute<symbol> input_buffer_name
-    {
-        this, "Input Buffer", "target_buffer", description{"Name of buffer~ to read from"}
+    attribute<symbol> input_buffer_name {
+        this, "Input Buffer", "targetBuffer", description{"Name of buffer~ to read from"}
     };
   
     //Static for now
@@ -91,30 +88,25 @@ public:
 //        this, "Max stacked Frames", 16, description{"Maximum number of possible stacked frames. Has to match number of stacked_frames_buffer channels."}
 //    };
     
-    attribute<int> export_tablesize
-    {
+    attribute<int> export_tablesize {
         this, "Export tablesize", 1048, description{"Default export tablesize."}
     };
     
-    attribute<double> oscillatorFreq
-    {
+    attribute<double> oscillatorFreq {
         this, "Osc Freq", 80., description{"Oscillator Frequency."}
     };
          
 
-    stacked_tables(const atoms& args = {}) : ui_operator::ui_operator {this, args}, multiFrameOsc{sampleRate, internalTablesize, oscFreq, maxFrames}
-    {
+    stacked_tables(const atoms& args = {}) : ui_operator::ui_operator {this, args}, multiFrameOsc{sampleRate, internalTablesize, oscFreq, maxFrames} {
 //        multiFrameOsc = {sampleRate, internalTablesize, oscFreq, maxFrames};
         nIntervalls = calculateSplitFreqs(splitFreqs);
     }
     
-    message<> dspsetup{ this, "dspsetup",
-        MIN_FUNCTION {
+    message<> dspsetup {
+        this, "dspsetup", MIN_FUNCTION {
             sampleRate = static_cast<float>(args[0]);
-                        
             multiFrameOsc.Osc.setSampleRate(sampleRate);
             cout << "dspsetup happend" << endl;
-
             return {};
         }
     };
@@ -161,8 +153,7 @@ public:
     
     message<> move_up_selected_frame {
         this, "move_up_selected_frame", MIN_FUNCTION {
-            if (!multiFrameOsc.stackedFrames.moveUpSelectedFrame())
-            {
+            if (!multiFrameOsc.stackedFrames.moveUpSelectedFrame()) {
                 cout << "Can't move up selected frame.\n";
             } else {
                 multiFrameOsc.calculateIds();
@@ -285,9 +276,9 @@ public:
                 t,
                 color {background_color}
             };
-            
-            for (int i = 0; i < nActiveFrames; i++) { drawStackedFrames(i, t); }
             draw_morphable_frame(t);
+            for (int i = 0; i < nActiveFrames; i++) { drawStackedFrames(i, t); }
+            
             return {};
         }
     };
@@ -295,7 +286,7 @@ public:
     void drawStackedFrames(int f, target t) {
         yOffset = (spacing * static_cast<float>(f)) + (spacing / 2.f) + (margin / 2.f);
         float stroke_width = 1.f;
-        if (multiFrameOsc.stackedFrames.frames[f].isSelected){stroke_width = 2.f;};
+        if (multiFrameOsc.stackedFrames.frames[f].isSelected){stroke_width = 1.5f;};
         float origin_x = margin / 2.f;
         float origin_y = (multiFrameOsc.stackedFrames.frames[f].samples[0] * yScaling * -1.f) + yOffset;
         float position = 0.f;

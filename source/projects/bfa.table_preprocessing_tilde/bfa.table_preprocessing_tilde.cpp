@@ -157,7 +157,7 @@ public:
         if (zeroCrossing == -1) {
             zeroCrossing = tablePreprocessor.zeroCrossings[tablePreprocessor.zeroCrossings.size() - 1];
         }
-        cout << "ZeroCrossing: " << zeroCrossing << endl;
+//        cout << "ZeroCrossing: " << zeroCrossing << endl;
         return zeroCrossing;
     }
     
@@ -254,34 +254,6 @@ public:
         }
     };
     
-    //Interpolation with Hermite & fractional (espacially in "zeros" mode)
-//    message<> generate_frame {
-//        this, "generate_frame", MIN_FUNCTION {
-//            if (overlayRect.visible || (sampleSelection.selectedZeroCrossing > 0)) {
-//                buffer_lock<> buf(targetBuffer);
-//                int target_tablesize = buf.frame_count();
-//                int source_tablesize = selectedSamples.size();
-//                float frac = static_cast<float>(source_tablesize) / static_cast<float>(target_tablesize);
-//                float position = 0.f;
-//
-//                if (buf.valid()) {
-//                    lib::interpolator::linear<> linear_interpolator;
-//                    for (int i = 0; i < target_tablesize; i++) {
-//                        int lower_index = floor(position);
-//                        int upper_index = ceil(position);
-//                        upper_index = upper_index > (source_tablesize - 1) ? (source_tablesize - 1) : upper_index;
-//                        float delta = position - static_cast<float>(lower_index);
-//                        float interpolated_value = linear_interpolator.operator()(selectedSamples[lower_index], selectedSamples[upper_index], delta);
-//                        buf[i] = interpolated_value;
-//                        position += frac;
-//                    }
-//                }
-//                outletStatus("newFrame");
-//            }
-//            return{};
-//        }
-//    };
-    
     void drawSamples(target t) {        //Das allgemeingültig schreiben und auch bei StakcedFrames verwenden!
         lib::interpolator::linear<> linearInterpolator;
         float position{}, lastX{margin}, lastY{yOffset};
@@ -361,80 +333,6 @@ public:
                 drawSamples(t);
             }
             
-//            float factor = static_cast<float>(inputSamples.size()) / t.width();
-//            float factorInv = static_cast<float>(t.width() / static_cast<float>(inputSamples.size()));
-//            sampleSelection.firstSample = static_cast<int>(floor(overlayRect.x * factor));
-//            sampleSelection.lastSample = static_cast<int>(floor((overlayRect.x + overlayRect.width) * factor));
-//            selectedSamples.clear();
-//
-//            rect<fill> {                //Background
-//                t,
-//                color {bgColor}
-//            };
-//            if (inputSamples.size() > 0) {        //Check if input_buffer is non-zero
-//                float originX = 0.f;
-//                float originY = t.height() * .5f;
-//                for (int i = 0; i < (inputSamples.size()); i++){
-//                    float frac = static_cast<float>(i) / static_cast<float>(inputSamples.size());
-//                    float x = frac * t.width();
-//                    float y = (inputSamples[i] * t.height() * -.5f) + (t.height() * .5f);
-//                    number strokeWidth = 1;
-//
-//                    if (mode == 0){
-//                        if (i >= floor(sampleSelection.selectedZeroCrossing) && i <= floor(sampleSelection.selectedZeroCrossing + tf0)){
-//                            strokeWidth = 2;
-//                            selectedSamples.push_back(inputSamples[i]);
-//                        }
-//                    }
-//                    if (mode == 1){
-//                        if (i >= sampleSelection.firstSample && i <= sampleSelection.lastSample){
-//                            strokeWidth = 2;
-//                            selectedSamples.push_back(inputSamples[i]);
-//                        }
-//                    }
-//                    line<stroke>{
-//                        t,
-//                        color {elementColor},
-//                        origin {originX, originY},
-//                        destination{x, y},
-//                        line_width{strokeWidth}
-//                    };
-//                    originX = x;
-//                    originY = y;
-//                }
-//            }
-//
-//            if (overlayRect.visible){
-//                overlayRect.height = t.height();
-//                rect<fill> {
-//                    t,
-//                    color {overlay_color},
-//                    position{overlayRect.x, overlayRect.y},
-//                    size{overlayRect.width, overlayRect.height}
-//                };
-//            }
-//
-//            if (mode == 0) {
-//            float scaleHeight = (t.height() * 0.2f);
-//                for (auto value : periodZeroCrossings) {
-//                    float xPos = value * factorInv;
-//                    line<stroke> {
-//                        t,
-//                        color {color::predefined::white},
-//                        origin {xPos, 0.f + scaleHeight},
-//                        destination {xPos, t.height() - scaleHeight},
-//                        line_width{1}
-//                    };
-//                }
-//                line<stroke> {
-//                    t,
-//                    color {color::predefined::black},
-//                    origin {sampleSelection.selectedZeroCrossing * factorInv, 0.f + scaleHeight},
-//                    destination {sampleSelection.selectedZeroCrossing * factorInv, t.height() - scaleHeight},
-//                    line_width{2}
-//
-//                };
-//            }
         return {};
         }
     };
