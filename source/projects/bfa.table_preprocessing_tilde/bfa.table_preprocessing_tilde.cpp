@@ -8,6 +8,7 @@
 #include "waveform_processing.h"
 #include "pitch_detection.h"
 #include "table_preprocessing_helper_functions.h"
+#include "wavetable_oscillator.h"
 
 
 using namespace c74::min;
@@ -15,6 +16,8 @@ using namespace c74::min::ui;
 
 class table_preprocessing : public object<table_preprocessing>, public ui_operator<160, 80> {
 private:
+    using Wavetable = Butterfly::Wavetable<float>;
+    using Osc = Butterfly::WavetableOscillator<Wavetable>;
     
     float margin{10.f};     //Könnte auch als Attribut
     float yOffset{};
@@ -41,7 +44,7 @@ public:
     MIN_AUTHOR          { "BFA_JK" };
     MIN_RELATED         { "index~, buffer~, wave~, waveform~" };
 
-    inlet<>  inletNewSample         { this, "(message) new sample dropped" };
+    inlet<>  inletNewSample     { this, "(message) new sample dropped" };
     outlet<> outletStatus       { this, "(message) Notification that the content of the buffer~ changed." };
     
     table_preprocessing(const atoms& args = {}) : ui_operator::ui_operator {this, args} {
@@ -217,6 +220,36 @@ public:
                 overlayRectZeros.x2 = static_cast<int>(std::clamp(nearestCrossing * factor + margin, margin, width + margin));
             }
             redraw();
+            return {};
+        }
+    };
+    
+    message<> generate_frame {
+        this, "generate_frame", MIN_FUNCTION {
+            if (mode == free && overlayRectFree.visible) {
+                targetBuffer.set(targetBufferName);
+                buffer_lock<> buf(targetBuffer);
+                int targetTablesize = buf.frame_count();
+                float widthDivNSampsFactor = tablePreprocessor.inputSamples.size() / width; //Consider margin?
+                int firstIdx = round(static_cast<float>(overlayRectFree.getStartX() - margin) * widthDivNSampsFactor);
+                int lastIdx = round(static_cast<float>(overlayRectFree.getStartX() + overlayRectFree.getWidth() - margin) * widthDivNSampsFactor);  //Segmentation fault possible?
+                std::vector<float> selectedSamples {tablePreprocessor.inputSamples.begin() + firstIdx, tablePreprocessor.inputSamples.begin() + lastIdx};   //Segmentation fault possible?
+                Osc interpolationOscillator{};
+                float exportTableOscFreq = sampleRate / static_cast<float>(targetTablesize);
+                Wavetable table {selectedSamples, sampleRate / 2.f};
+                std::vector<Wavetable> wavetable {table};
+                interpolationOscillator.setTable(&wavetable);
+                interpolationOscillator.setSampleRate(sampleRate);
+                interpolationOscillator.setFrequency(exportTableOscFreq);
+                if (buf.valid()) {
+                    for (int i = 0; i <targetTablesize; i++) {
+                        buf[i] = interpolationOscillator++;
+                    }
+                }
+                outletStatus.send("newFrame");
+            } else if (mode == zeros && overlayRectZeros.visible) {
+                
+            }
             return {};
         }
     };
