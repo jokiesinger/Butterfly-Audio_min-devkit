@@ -51,18 +51,20 @@ public:
 //        overlayRectFree.visible = true;
     }
     
+    ~table_preprocessing() = default;
+    
     buffer_reference inputBuffer {
         this, MIN_FUNCTION {
             outletStatus.send(args);
             return {};
-        }
+        }, false
     };
     
     buffer_reference targetBuffer {
         this, MIN_FUNCTION {
             outletStatus.send(args);
             return {};
-        }
+        }, false
     };
     
     //Members, whose state is addressable, queryable and saveable from Max
@@ -119,12 +121,15 @@ public:
     message<> sampleDropped {
         this, "sampleDropped", "Read again from the buffer~.", MIN_FUNCTION {
             inputBuffer.set(inputBufferName);
-            buffer_lock<> buf(inputBuffer);
+            buffer_lock<false> buf(inputBuffer);
             if (buf.channel_count() != 1) {
                 cout << "Buffer channel count has to be one." << endl;
                 return{};
             }
-            if (!buf.valid()) { return{}; }
+            if (!buf.valid()) {
+                buf.~buffer_lock();
+                return{};
+            }
             tablePreprocessor.inputSamples.clear();
             for (auto i = 0; i < buf.frame_count(); ++i) {
                 tablePreprocessor.inputSamples.push_back(buf.lookup(i, 0));
@@ -136,6 +141,8 @@ public:
             if (mode == free) {overlayRectFree.visible = true;}
             else if (mode == zeros) {overlayRectZeros.visible = true;}
             redraw();   //show new samples
+//            buf.dirty();
+            buf.~buffer_lock();
             return{};
         }
     };
@@ -163,6 +170,7 @@ public:
     
     message<> mousedown {
         this, "mousedown", MIN_FUNCTION {
+            if (tablePreprocessor.inputSamples.empty()) {return{};}
             mouseDown = true;
             event e {args};
             if (mode == free) {
@@ -194,6 +202,7 @@ public:
     
     message<> mouseup {
         this, "mouseup", MIN_FUNCTION {
+            if (tablePreprocessor.inputSamples.empty()) {return{};}
             mouseDown = false;
             event e {args};
             if (mode == free) {
@@ -210,6 +219,7 @@ public:
     
     message<> mousedrag {
         this, "mousedrag", MIN_FUNCTION {
+            if (tablePreprocessor.inputSamples.empty()) {return{};}
             event e {args};
             if (mode == free) {
                 overlayRectFree.x2 = static_cast<int>(std::clamp(static_cast<float>(e.x()), margin, width + margin));
@@ -226,9 +236,10 @@ public:
     
     message<> generate_frame {
         this, "generate_frame", MIN_FUNCTION {
+            if (tablePreprocessor.inputSamples.empty()) {return{};}
             if (mode == free && overlayRectFree.visible) {
                 targetBuffer.set(targetBufferName);
-                buffer_lock<> buf(targetBuffer);
+                buffer_lock<false> buf(targetBuffer);
                 int targetTablesize = buf.frame_count();
                 float widthDivNSampsFactor = tablePreprocessor.inputSamples.size() / width; //Consider margin?
                 int firstIdx = round(static_cast<float>(overlayRectFree.getStartX() - margin) * widthDivNSampsFactor);
@@ -247,6 +258,8 @@ public:
                     }
                 }
                 outletStatus.send("newFrame");
+                buf.dirty();
+                buf.~buffer_lock();
             } else if (mode == zeros && overlayRectZeros.visible) {
                 
             }

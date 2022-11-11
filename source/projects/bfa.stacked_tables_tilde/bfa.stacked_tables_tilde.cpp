@@ -18,7 +18,7 @@
 using namespace c74::min;
 using namespace c74::min::ui;
 
-class stacked_tables : public object<stacked_tables>, public vector_operator<>, public ui_operator<160, 160>
+class stacked_tables_tilde : public object<stacked_tables_tilde>, public vector_operator<>, public ui_operator<160, 160>
 {
 private:
     int nIntervalls;
@@ -54,14 +54,14 @@ public:
         MIN_FUNCTION {                                      // will receive a symbol arg indicating 'binding', 'unbinding', or 'modified'
             message_out.send(args);
             return {};
-        }
+        }, false
     };
     
     buffer_reference output_buffer {
         this, MIN_FUNCTION {
             message_out.send(args);
             return {};
-        }
+        }, false
     };
 
     attribute<color> background_color {this, "Background Color", color::predefined::gray, title {"Background Color"}};
@@ -97,7 +97,7 @@ public:
     };
          
 
-    stacked_tables(const atoms& args = {}) : ui_operator::ui_operator {this, args}, multiFrameOsc{sampleRate, internalTablesize, oscFreq, maxFrames} {
+    stacked_tables_tilde(const atoms& args = {}) : ui_operator::ui_operator {this, args}, multiFrameOsc{sampleRate, internalTablesize, oscFreq, maxFrames} {
 //        multiFrameOsc = {sampleRate, internalTablesize, oscFreq, maxFrames};
         nIntervalls = calculateSplitFreqs(splitFreqs);
     }
@@ -115,7 +115,7 @@ public:
         this, "add_frame", "Read from input buffer", MIN_FUNCTION {
             //Read from buffer
             input_buffer.set(input_buffer_name);
-            buffer_lock<> buf(input_buffer);
+            buffer_lock<false> buf(input_buffer);
             auto chan = std::min<size_t>(m_channel - 1, buf.channel_count());
             if (buf.channel_count() != 1) {
                 cout << "Buffer channel count has to be one.\n";
@@ -138,6 +138,8 @@ public:
                 message_out.send("Max frame count reached");    //Das dem Nutzer prompten
             }
             redraw();
+            buf.dirty();
+            buf.~buffer_lock();
             return{};
         }
     };
@@ -246,7 +248,7 @@ public:
             }
             message_out("export_buffer_length", stackedTable.size());    //set buffer~ size
             output_buffer.set(output_buffer_name);
-            buffer_lock<> buf(output_buffer);
+            buffer_lock<false> buf(output_buffer);      //false: not accessing via audio thread
             
             if (buf.channel_count() > 1) {
                 cout << "Output buffer has more than one channel (has to be one).\n";
@@ -258,6 +260,8 @@ public:
                 }
                 message_out("exporting_done");
             }
+            buf.dirty();
+            buf.~buffer_lock();
             return{};
         }
     };
@@ -353,8 +357,8 @@ public:
     
     void operator()(audio_bundle input, audio_bundle output)
     {
-        auto in  = input.samples(0);                           // get vector for channel 0 (first channel)
-        auto out = output.samples(0);                          // get vector for channel 0 (first channel)
+        auto in  = input.samples(0);
+        auto out = output.samples(0);
 
         for (auto i = 0; i < input.frame_count(); ++i) {
             out[i] = ++multiFrameOsc * outputGain++;
@@ -362,4 +366,4 @@ public:
     }
 };
 
-MIN_EXTERNAL(stacked_tables);
+MIN_EXTERNAL(stacked_tables_tilde);

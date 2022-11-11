@@ -36,8 +36,8 @@ struct SampleSelection {
 };
 
 struct TablePreprocessor {
-    std::vector<float> inputSamples{};
-    std::vector<double> zeroCrossings{};
+    std::vector<float> inputSamples;
+    std::vector<double> zeroCrossings;
     
     void analyzeZeroCrossings() {
         zeroCrossings = Butterfly::getCrossings<std::vector<float>::iterator>(inputSamples.begin(), inputSamples.end());

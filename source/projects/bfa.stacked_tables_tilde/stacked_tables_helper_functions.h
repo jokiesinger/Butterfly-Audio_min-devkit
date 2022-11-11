@@ -81,8 +81,10 @@ public:
     
         
     void selectFrame(int idx) {
-        for (auto &frame : frames) { frame.isSelected = false; }   //static function draus machen?
-        frames[idx].isSelected = true;
+        if (idx < frames.size()) {
+            for (auto &frame : frames) { frame.isSelected = false; }   //static function draus machen?
+            frames[idx].isSelected = true;
+        }
     }
     
     bool moveUpSelectedFrame() {
