@@ -9,6 +9,7 @@
 #include "pitch_detection.h"
 #include "table_preprocessing_helper_functions.h"
 #include "wavetable_oscillator.h"
+#include "graphics_transform.h"
 
 
 using namespace c74::min;
@@ -143,6 +144,8 @@ public:
             redraw();   //show new samples
 //            buf.dirty();
             buf.~buffer_lock();
+
+            inputSamplesChanged();
             return{};
         }
     };
@@ -166,52 +169,92 @@ public:
         }
 //        cout << "ZeroCrossing: " << zeroCrossing << endl;
         return zeroCrossing;
-    }
+	}
+
+	enum class Button { Left, Right, Center };
+     Butterfly::Point mouseDownPoint, currentMousePoint;
+     Button   button {};
+     bool     dragging {false};
     
     message<> mousedown {
         this, "mousedown", MIN_FUNCTION {
             if (tablePreprocessor.inputSamples.empty()) {return{};}
             mouseDown = true;
             event e {args};
-            if (mode == free) {
-                overlayRectFree.x2 = e.x();     //Reset width
-                overlayRectFree.x1 = e.x();
-            } else if (mode == zeros) {
-                //find nearest zeroCrossing
-                float nearestCrossing = nearestZeroCrossing(e.x());
-                float factor = width / static_cast<float>(tablePreprocessor.inputSamples.size());
-//                cout << "XPixelPosition: " << nearestCrossing * factor << endl;
-                //set closest xPixel in overlayRect
-                overlayRectZeros.x2 = static_cast<int>(nearestCrossing * factor + margin);
-                overlayRectZeros.x1 = static_cast<int>(nearestCrossing * factor + margin);
-            }
+
+            if (e.m_modifiers & c74::max::eLeftButton) {
+
+                 if (mode == free) {
+                     overlayRectFree.x2 = e.x();     //Reset width
+                     overlayRectFree.x1 = e.x();
+                 } else if (mode == zeros) {
+                     //find nearest zeroCrossing
+                     float nearestCrossing = nearestZeroCrossing(e.x());
+                     float factor = width / static_cast<float>(tablePreprocessor.inputSamples.size());
+     //                cout << "XPixelPosition: " << nearestCrossing * factor << endl;
+                     //set closest xPixel in overlayRect
+                     overlayRectZeros.x2 = static_cast<int>(nearestCrossing * factor + margin);
+                     overlayRectZeros.x1 = static_cast<int>(nearestCrossing * factor + margin);
+                 }
+		  } else if (e.m_modifiers & c74::max::eRightButton) {
+		  }
+		  mouseDownPoint    = {static_cast<double>(e.x()), static_cast<double>(e.y())};
+		  currentMousePoint = mouseDownPoint;
+		  dragging          = true;
             redraw();
             return{};
         }
     };
     
-//    message<> mousewheel {
-//        this, "mousewheel", MIN_FUNCTION {
-//            event e {args};
-//            cout << "WheelX: " << e.wheel_delta_x() << endl;
-//            cout << "WheelY: " << e.wheel_delta_y() << endl;
-//
-//            return{};
-//        }
-//    };
+    message<> mousewheel {
+        this, "mousewheel", MIN_FUNCTION {
+            event e {args};	
+	       double zoomSpeed{ 1.1 };
+	       double fastZoomSpeed{ 1.8 };
+            const auto speed = e.is_command_key_down() ? fastZoomSpeed : zoomSpeed;
+            
+	       const auto d = e.wheel_delta_y() > 0 ? speed : 1 / speed;
+	       transform.scaleAround(e.x(), e.y(), d, 1);
+	       constrainViewTransform();
+            redraw();
+            return{};
+        }
+    };
     
     message<> mouseup {
         this, "mouseup", MIN_FUNCTION {
             if (tablePreprocessor.inputSamples.empty()) {return{};}
             mouseDown = false;
             event e {args};
-            if (mode == free) {
-                overlayRectFree.x2 = static_cast<int>(std::clamp(static_cast<float>(e.x()), margin, width + margin)) ;
-            } else if (mode == zeros) {
-                float nearestCrossing = nearestZeroCrossing(e.x());
-                float factor = width / static_cast<float>(tablePreprocessor.inputSamples.size());
-                overlayRectZeros.x2 = static_cast<int>(std::clamp(nearestCrossing * factor + margin, margin, width + margin));
-            }
+
+            
+		  const Butterfly::Point current = {static_cast<double>(e.x()), static_cast<double>(e.y())};
+		  currentMousePoint           = current;
+            if (e.m_modifiers & c74::max::eLeftButton) {
+			if (mode == free) {
+				const auto selectionValueRect = transform.from({mouseDownPoint, currentMousePoint});
+				selection.first               = selectionValueRect.x;
+				selection.second              = selectionValueRect.x + selectionValueRect.width;
+				overlayRectFree.x2 = static_cast<int>(std::clamp(static_cast<float>(e.x()), margin, width + margin));
+			}
+			else if (mode == zeros) {
+				float nearestCrossing = nearestZeroCrossing(e.x());
+				float factor          = width / static_cast<float>(tablePreprocessor.inputSamples.size());
+				overlayRectZeros.x2   = static_cast<int>(std::clamp(nearestCrossing * factor + margin, margin, width + margin));
+			}
+		  } else if (e.m_modifiers & c74::max::eRightButton) {
+			  if (dragging) {
+				  Butterfly::Rect r {mouseDownPoint - waveformView.topLeft(), currentMousePoint - waveformView.topLeft()};
+				  r.y = waveformView.y;
+				  r.height = waveformView.height;
+				  if (r.width > 0) {
+					  auto r2        = transform.from(r);
+					  transform = Butterfly::Transform::MapRect(r2, waveformView);
+					  constrainViewTransform();
+				  }
+			  }
+		  }
+		  dragging = false;
             redraw();
             return{};
         }
@@ -240,26 +283,25 @@ public:
             if (mode == free && overlayRectFree.visible) {
                 targetBuffer.set(targetBufferName);
                 buffer_lock<false> buf(targetBuffer);
-                int targetTablesize = buf.frame_count();
+		      if (!buf.valid())
+					return {};
+                const int targetTablesize = buf.frame_count();
                 float widthDivNSampsFactor = tablePreprocessor.inputSamples.size() / width; //Consider margin?
                 int firstIdx = round(static_cast<float>(overlayRectFree.getStartX() - margin) * widthDivNSampsFactor);
                 int lastIdx = round(static_cast<float>(overlayRectFree.getStartX() + overlayRectFree.getWidth() - margin) * widthDivNSampsFactor);  //Segmentation fault possible?
                 std::vector<float> selectedSamples {tablePreprocessor.inputSamples.begin() + firstIdx, tablePreprocessor.inputSamples.begin() + lastIdx};   //Segmentation fault possible?
-                Osc interpolationOscillator{};
                 float exportTableOscFreq = sampleRate / static_cast<float>(targetTablesize);
+
                 Wavetable table {selectedSamples, sampleRate / 2.f};
                 std::vector<Wavetable> wavetable {table};
-                interpolationOscillator.setTable(&wavetable);
-                interpolationOscillator.setSampleRate(sampleRate);
-                interpolationOscillator.setFrequency(exportTableOscFreq);
-                if (buf.valid()) {
-                    for (int i = 0; i <targetTablesize; i++) {
-                        buf[i] = interpolationOscillator++;
-                    }
+                Osc interpolationOscillator{ &wavetable, sampleRate, exportTableOscFreq};
+
+                for (int i = 0; i <targetTablesize; i++) {
+                     buf[i] = interpolationOscillator++;
                 }
                 outletStatus.send("newFrame");
                 buf.dirty();
-                buf.~buffer_lock();
+                buf.~buffer_lock(); //redundant
             } else if (mode == zeros && overlayRectZeros.visible) {
                 
             }
@@ -268,8 +310,15 @@ public:
     };
     
     void drawSamples(target t) {        //Das allgemeingültig schreiben und auch bei StakcedFrames verwenden!
-        lib::interpolator::linear<> linearInterpolator;
-        float position{}, lastX{margin}, lastY{yOffset};
+	   if (tablePreprocessor.inputSamples.empty()) return;
+	   lib::interpolator::linear<> linearInterpolator;
+        auto r = transform.apply(dataRange);
+	   rect<fill> {t, color {overlayColor}, position {r.x, r.y}, size {r.width, r.height}};
+
+
+        float position{};
+        const auto point = transform.apply({static_cast<double>(0), tablePreprocessor.inputSamples[0]});
+        auto last = point;
         int inputSampleSize = static_cast<int>(tablePreprocessor.inputSamples.size()) - 1;      //Zero based counting
         float delta = static_cast<float>(inputSampleSize) / width;
         for (int i = 1; i < static_cast<int>(width); ++i) {
@@ -277,18 +326,20 @@ public:
             int upperSmplIdx = ceil(position);
             upperSmplIdx = upperSmplIdx > inputSampleSize ? (inputSampleSize) : upperSmplIdx;       //prevent segmentation fault
             float interpolatedValue = linearInterpolator(tablePreprocessor.inputSamples[lowerSmplIdx], tablePreprocessor.inputSamples[upperSmplIdx], delta) * waveformYScaling;
-            float currentY = ((interpolatedValue - 1.f) * -0.5f * height) + margin;
-            int currentX = i + static_cast<int>(margin);
+            //float currentY = ((interpolatedValue - 1.f) * -0.5f * height) + margin;
+            //int currentX = i + static_cast<int>(margin);
+
+            const auto point = transform.apply({static_cast<double>(position), interpolatedValue});
+
             line<stroke> {
                 t,
                 color { waveformColor },
-                origin { lastX, lastY },
-                destination { currentX, currentY },
+                origin { last.x, last.y },
+                destination{point.x, point.y},
                 line_width { strokeWidth }
             };
             position += delta;
-            lastX = currentX;
-            lastY = currentY;
+		  last = point;
         }
     }
     
@@ -308,27 +359,58 @@ public:
     }
     
     void drawOverlayRects(target t) {
-        if (overlayRectFree.visible && (overlayRectFree.x1 != overlayRectFree.x2)) {
-            cout << "OverlayRectFree Width: "<< overlayRectFree.getWidth() << endl; //size 0 ist schlecht
-            rect<fill> {
-                t,
-                color { overlayColor },
-                position { static_cast<float>(overlayRectFree.getStartX()), margin },
-                size { static_cast<float>(overlayRectFree.getWidth()), height }
-            };
-        } else if (overlayRectZeros.visible  && (overlayRectZeros.x1 != overlayRectZeros.x2)) {
-            rect<fill> {
-                t,
-                color { overlayColor },
-                position { static_cast<float>(overlayRectZeros.getStartX()), margin },
-                size { static_cast<float>(overlayRectZeros.getWidth()), height }
-            };
-        }
+		if (!overlayRectFree.visible)
+			return;
+		const auto r = transform.apply({{selection.first, 1}, {selection.second, -1}});
+            rect<fill> {              t,                color { overlayColor }, position {r.x, r.y}, size {r.width, r.height}};
+        //if (overlayRectFree.visible && (overlayRectFree.x1 != overlayRectFree.x2)) {
+        //    cout << "OverlayRectFree Width: "<< overlayRectFree.getWidth() << endl; //size 0 ist schlecht
+        //    rect<fill> {
+        //        t,
+        //        color { overlayColor },
+        //        position { static_cast<float>(overlayRectFree.getStartX()), margin },
+        //        size { static_cast<float>(overlayRectFree.getWidth()), height }
+        //    };
+        //} else if (overlayRectZeros.visible  && (overlayRectZeros.x1 != overlayRectZeros.x2)) {
+        //    rect<fill> {
+        //        t,
+        //        color { overlayColor },
+        //        position { static_cast<float>(overlayRectZeros.getStartX()), margin },
+        //        size { static_cast<float>(overlayRectZeros.getWidth()), height }
+        //    };
+        //}
     }
+
+
+    void inputSamplesChanged() {
+		dataRange = Butterfly::Rect::fromBounds(0, tablePreprocessor.inputSamples.size(), -1, 1);
+		transform = Butterfly::Transform::MapRect(dataRange, waveformView);
+    }
+         // Called when the target has been resized through any means
+	void targetResized(double width, double height) {
+		const auto currentViewRect = transform.from(waveformView);
+		targetSize                 = {width, height };
+		waveformView.resize(width - 2 * margin, height - 2 * margin).moveTo({margin, margin});
+          //transform                  = Butterfly::Transform::MapRect(currentViewRect, waveformView);
+		transform                  = Butterfly::Transform::MapRect(dataRange, waveformView);
+	}
+
+	void constrainViewTransform() {
+		transform.ensureWithin(dataRange, waveformView);
+	}
+
+	Butterfly::Rect      dataRange;    // size of the draw target, will be updated on first draw.
+	Butterfly::Point     targetSize {100, 100};    // size of the draw target, will be updated on first draw.
+	Butterfly::Rect      waveformView {{}, targetSize};        // size of the draw target, will be updated on first draw.
+	Butterfly::Transform transform;
+	std::pair<double,double>     selection;
     
     message<> paint {
         this, "paint", MIN_FUNCTION {
             target t        {args};
+	       if (targetSize.x != t.width() || targetSize.y != t.height()) {
+		       targetResized(t.width(), t.height());
+            }
             width = t.width() - (margin * 2.f);
             height = t.height() - (margin * 2.f);
             yOffset = (height / 2.f) + margin;
