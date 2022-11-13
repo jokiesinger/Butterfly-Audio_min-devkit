@@ -220,6 +220,7 @@ public:
             return{};
         }
     };
+
     
     message<> mouseup {
         this, "mouseup", MIN_FUNCTION {
@@ -232,9 +233,7 @@ public:
 		  currentMousePoint           = current;
             if (e.m_modifiers & c74::max::eLeftButton) {
 			if (mode == free) {
-				const auto selectionValueRect = transform.from({mouseDownPoint, currentMousePoint});
-				selection.first               = selectionValueRect.x;
-				selection.second              = selectionValueRect.x + selectionValueRect.width;
+                    updateSelection(mouseDownPoint, currentMousePoint);
 				overlayRectFree.x2 = static_cast<int>(std::clamp(static_cast<float>(e.x()), margin, width + margin));
 			}
 			else if (mode == zeros) {
@@ -259,19 +258,31 @@ public:
             return{};
         }
     };
+
+    void updateSelection(const Butterfly::Point& mouseDownPoint, const Butterfly::Point& currentMousePoint) {
+		const auto selectionValueRect = transform.from({mouseDownPoint, currentMousePoint});
+		selection.first               = std::clamp(selectionValueRect.x, 0., tablePreprocessor.inputSamples.size() - 1.0);
+		selection.second = std::clamp(selectionValueRect.x + selectionValueRect.width, 0., tablePreprocessor.inputSamples.size() - 1.0);
+    }
     
     message<> mousedrag {
         this, "mousedrag", MIN_FUNCTION {
             if (tablePreprocessor.inputSamples.empty()) {return{};}
             event e {args};
-            if (mode == free) {
-                overlayRectFree.x2 = static_cast<int>(std::clamp(static_cast<float>(e.x()), margin, width + margin));
+		  const Butterfly::Point current = {static_cast<double>(e.x()), static_cast<double>(e.y())};
+		  currentMousePoint           = current;
 
-            } else if (mode == zeros) {
-                float nearestCrossing = nearestZeroCrossing(e.x());
-                float factor = width / static_cast<float>(tablePreprocessor.inputSamples.size());
-                overlayRectZeros.x2 = static_cast<int>(std::clamp(nearestCrossing * factor + margin, margin, width + margin));
-            }
+		  if (e.m_modifiers & c74::max::eLeftButton) {
+			  if (mode == free) {
+				  updateSelection(mouseDownPoint, currentMousePoint);
+				  overlayRectFree.x2 = static_cast<int>(std::clamp(static_cast<float>(e.x()), margin, width + margin));
+			  }
+			  else if (mode == zeros) {
+				  float nearestCrossing = nearestZeroCrossing(e.x());
+				  float factor          = width / static_cast<float>(tablePreprocessor.inputSamples.size());
+				  overlayRectZeros.x2   = static_cast<int>(std::clamp(nearestCrossing * factor + margin, margin, width + margin));
+			  }
+		  }
             redraw();
             return {};
         }
@@ -287,8 +298,12 @@ public:
 					return {};
                 const int targetTablesize = buf.frame_count();
                 float widthDivNSampsFactor = tablePreprocessor.inputSamples.size() / width; //Consider margin?
-                int firstIdx = round(static_cast<float>(overlayRectFree.getStartX() - margin) * widthDivNSampsFactor);
-                int lastIdx = round(static_cast<float>(overlayRectFree.getStartX() + overlayRectFree.getWidth() - margin) * widthDivNSampsFactor);  //Segmentation fault possible?
+                //int firstIdx = round(static_cast<float>(overlayRectFree.getStartX() - margin) * widthDivNSampsFactor);
+                //int lastIdx = round(static_cast<float>(overlayRectFree.getStartX() + overlayRectFree.getWidth() - margin) * widthDivNSampsFactor);  //Segmentation fault possible?
+		      if (std::abs(selection.first - selection.second) < 3)
+		      	return {};
+		      int                firstIdx = round(selection.first);
+		      int                lastIdx  = round(selection.second);
                 std::vector<float> selectedSamples {tablePreprocessor.inputSamples.begin() + firstIdx, tablePreprocessor.inputSamples.begin() + lastIdx};   //Segmentation fault possible?
                 float exportTableOscFreq = sampleRate / static_cast<float>(targetTablesize);
 
@@ -313,7 +328,7 @@ public:
 	   if (tablePreprocessor.inputSamples.empty()) return;
 	   lib::interpolator::linear<> linearInterpolator;
         auto r = transform.apply(dataRange);
-	   rect<fill> {t, color {overlayColor}, position {r.x, r.y}, size {r.width, r.height}};
+	   //rect<fill> {t, color {overlayColor}, position {r.x, r.y}, size {r.width, r.height}};
 
 
         float position{};
@@ -361,8 +376,10 @@ public:
     void drawOverlayRects(target t) {
 		if (!overlayRectFree.visible)
 			return;
+		if (selection.first == selection.second)
+			return;
 		const auto r = transform.apply({{selection.first, 1}, {selection.second, -1}});
-            rect<fill> {              t,                color { overlayColor }, position {r.x, r.y}, size {r.width, r.height}};
+          rect<fill> { t, color { overlayColor }, position {r.x, r.y}, size {r.width, r.height}};
         //if (overlayRectFree.visible && (overlayRectFree.x1 != overlayRectFree.x2)) {
         //    cout << "OverlayRectFree Width: "<< overlayRectFree.getWidth() << endl; //size 0 ist schlecht
         //    rect<fill> {
