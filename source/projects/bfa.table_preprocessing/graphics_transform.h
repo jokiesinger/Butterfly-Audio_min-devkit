@@ -113,6 +113,12 @@ namespace Butterfly {
 			t.translate(-from.topLeft());
 			return t;
 		}
+        constexpr double applyX(double x) {
+            return x * sx + x0;
+        }
+        constexpr double applyY(double y) {
+            return y * sy + y0;
+        }
 		constexpr Point apply(const Point& p) const {
 			return {p.x * sx + x0, p.y * sy + y0};
 		}
@@ -120,6 +126,12 @@ namespace Butterfly {
 			const auto p = apply(r.topLeft());
 			return {p.x, p.y, r.width * sx, r.height * sy};
 		}
+        constexpr double fromX(double x) {
+            return (x - x0) / sx;
+        }
+        constexpr double fromY(double y) {
+            return (y - y0) / sy;
+        }
 		constexpr Point from(const Point& p) const {
 			return {(p.x - x0) / sx, (p.y - y0) / sy};
 		}

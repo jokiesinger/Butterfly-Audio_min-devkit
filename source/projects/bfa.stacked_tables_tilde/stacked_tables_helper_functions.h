@@ -188,7 +188,7 @@ public:
     float firstFrameWeighting{1.f};
     float secondFrameWeighting{0.f};
     
-    Butterfly::RampedValue<float> morphingParam{1.f, 1000};
+    Butterfly::RampedValue<float> morphingParam{1.f, 150};
     
     //Constructor inits Osc with zero tables to prevent assert
 //    MultiFrameOsc() = default;
@@ -302,6 +302,7 @@ public:
 
     
     void updateMorphingSamples() {
+        if (stackedFrames.frames.size() < 2) { return;}
         for (int i = 0; i < morphingSamples.size(); i++) {
             morphingSamples[i] = stackedFrames.frames[firstFrameIdx].samples[i] * firstFrameWeighting + stackedFrames.frames[secondFrameIdx].samples[i] * secondFrameWeighting;
         }

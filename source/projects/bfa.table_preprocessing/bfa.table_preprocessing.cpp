@@ -27,7 +27,8 @@ private:
     TablePreprocessor tablePreprocessor;
 //    SampleSelection sampleSelection{};
     
-    enum Mode {free, zeros, period} mode;
+    enum class Mode {free, zeros, period};
+    Mode mode{Mode::free};
     
 //    std::optional<Butterfly::PitchInfo> pitchInfoOptional;
 //    Butterfly::PitchInfo pitchInfo;
@@ -50,7 +51,8 @@ private:
     Butterfly::Point     targetSize {100, 100};    // size of the draw target, will be updated on first draw.
     Butterfly::Rect      waveformView {{}, targetSize};        // size of the draw target, will be updated on first draw.
     Butterfly::Transform transform;
-    std::pair<double,double>     selection;
+    std::pair<double,double>     freeSelection;
+    std::pair<double,double>     zerosSelection;
     
 public:
     MIN_DESCRIPTION     { "Read from a buffer~ and display." };
@@ -117,15 +119,15 @@ public:
     message<> setMode {
         this, "setMode", "Set frame selection mode (custom, period).", MIN_FUNCTION {
             if (args[0] == "Free") {
-                mode = free;
+                mode = Mode::free;
                 overlayRectFree.visible = true;
                 overlayRectZeros.visible = false;
             } else if (args[0] == "Zeros") {
-                mode = zeros;
+                mode = Mode::zeros;
                 overlayRectFree.visible = false;
                 overlayRectZeros.visible = true;
             } else if (args[0] == "Period") {
-                mode = period;
+                mode = Mode::period;
             }
             redraw();
             return{};
@@ -152,8 +154,8 @@ public:
             tablePreprocessor.analyzeZeroCrossings();
             overlayRectFree = {};
             overlayRectZeros = {};
-            if (mode == free) {overlayRectFree.visible = true;}
-            else if (mode == zeros) {overlayRectZeros.visible = true;}
+            if (mode == Mode::free) {overlayRectFree.visible = true;}
+            else if (mode == Mode::zeros) {overlayRectZeros.visible = true;}
             redraw();   //show new samples
 //            buf.dirty();
             buf.~buffer_lock();
@@ -163,25 +165,9 @@ public:
         }
     };
     
-    float closest(std::vector<double> &vec, float value) {
-        auto const it = std::lower_bound(vec.begin(), vec.end(), value);
-        if (it == vec.end()) { return -1; }
-//        if (it == vec.end()) { return *vec.end(); }
-
-        return *it;
-    }
-    
-    float nearestZeroCrossing(int mouseX) {
-        float zeroCrossing{};
-        float factor = static_cast<float>(tablePreprocessor.inputSamples.size()) / width;
-        //find idx of element that value is closest to
-        zeroCrossing = closest(tablePreprocessor.zeroCrossings, static_cast<float>(mouseX - margin) * factor);
-        ///TODO: Weniger hässlich schreiben!
-        if (zeroCrossing == -1) {
-            zeroCrossing = tablePreprocessor.zeroCrossings[tablePreprocessor.zeroCrossings.size() - 1];
-        }
-//        cout << "ZeroCrossing: " << zeroCrossing << endl;
-        return zeroCrossing;
+    double nearestZeroCrossing(double sampleIdx) {
+        if(tablePreprocessor.zeroCrossings.empty()) {return 0.;}
+        return *std::min_element(tablePreprocessor.zeroCrossings.begin(), tablePreprocessor.zeroCrossings.end(), [sampleIdx](auto a, auto b){return std::abs(a - sampleIdx) < std::abs(b - sampleIdx);});
 	}
     
     message<> mousedown {
@@ -192,17 +178,13 @@ public:
 
             if (e.m_modifiers & c74::max::eLeftButton) {
 
-                 if (mode == free) {
+                 if (mode == Mode::free) {
                      overlayRectFree.x2 = e.x();     //Reset width
                      overlayRectFree.x1 = e.x();
-                 } else if (mode == zeros) {
+                 } else if (mode == Mode::zeros) {
                      //find nearest zeroCrossing
-                     float nearestCrossing = nearestZeroCrossing(e.x());
-                     float factor = width / static_cast<float>(tablePreprocessor.inputSamples.size());
-     //                cout << "XPixelPosition: " << nearestCrossing * factor << endl;
-                     //set closest xPixel in overlayRect
-                     overlayRectZeros.x2 = static_cast<int>(nearestCrossing * factor + margin);
-                     overlayRectZeros.x1 = static_cast<int>(nearestCrossing * factor + margin);
+                     
+                     
                  }
 		  } else if (e.m_modifiers & c74::max::eRightButton) {
 		  }
@@ -240,11 +222,11 @@ public:
 		  const Butterfly::Point current = {static_cast<double>(e.x()), static_cast<double>(e.y())};
 		  currentMousePoint           = current;
             if (e.m_modifiers & c74::max::eLeftButton) {
-			if (mode == free) {
-                    updateSelection(mouseDownPoint, currentMousePoint);
+			if (mode == Mode::free) {
+                    updateFreeSelection(mouseDownPoint, currentMousePoint);
 				overlayRectFree.x2 = static_cast<int>(std::clamp(static_cast<float>(e.x()), margin, width + margin));
 			}
-			else if (mode == zeros) {
+			else if (mode == Mode::zeros) {
 				float nearestCrossing = nearestZeroCrossing(e.x());
 				float factor          = width / static_cast<float>(tablePreprocessor.inputSamples.size());
 				overlayRectZeros.x2   = static_cast<int>(std::clamp(nearestCrossing * factor + margin, margin, width + margin));
@@ -254,6 +236,7 @@ public:
 				  Butterfly::Rect r {mouseDownPoint - waveformView.topLeft(), currentMousePoint - waveformView.topLeft()};
 				  r.y = waveformView.y;
 				  r.height = waveformView.height;
+                  r.x -= margin;
 				  if (r.width > 0) {
 					  auto r2        = transform.from(r);
 					  transform = Butterfly::Transform::MapRect(r2, waveformView);
@@ -271,18 +254,14 @@ public:
         this, "mousedrag", MIN_FUNCTION {
             if (tablePreprocessor.inputSamples.empty()) {return{};}
             event e {args};
-		  const Butterfly::Point current = {static_cast<double>(e.x()), static_cast<double>(e.y())};
-		  currentMousePoint           = current;
+            currentMousePoint           = {static_cast<double>(e.x()), static_cast<double>(e.y())};
 
 		  if (e.m_modifiers & c74::max::eLeftButton) {
-			  if (mode == free) {
-				  updateSelection(mouseDownPoint, currentMousePoint);
-				  overlayRectFree.x2 = static_cast<int>(std::clamp(static_cast<float>(e.x()), margin, width + margin));
+			  if (mode == Mode::free) {
+				  updateFreeSelection(mouseDownPoint, currentMousePoint);
 			  }
-			  else if (mode == zeros) {
-				  float nearestCrossing = nearestZeroCrossing(e.x());
-				  float factor          = width / static_cast<float>(tablePreprocessor.inputSamples.size());
-				  overlayRectZeros.x2   = static_cast<int>(std::clamp(nearestCrossing * factor + margin, margin, width + margin));
+			  else if (mode == Mode::zeros) {
+                  updateZerosSelection(mouseDownPoint, currentMousePoint);
 			  }
 		  }
             redraw();
@@ -290,70 +269,63 @@ public:
         }
     };
     
+    void exportFrame(int begin, int end) {
+        if (tablePreprocessor.inputSamples.empty()) return;
+        if (end <= begin) return;
+        if (begin < 0 || end >= tablePreprocessor.inputSamples.size()) return;
+        if (std::abs(begin - end) < Wavetable::minimumInputSize()) return;
+        
+        targetBuffer.set(targetBufferName);
+        buffer_lock<false> buf(targetBuffer);
+        if (!buf.valid()) return;
+        const int targetTablesize = buf.frame_count();
+        const std::vector<float> selectedSamples {tablePreprocessor.inputSamples.begin() + begin, tablePreprocessor.inputSamples.begin() + end};
+        const float exportTableOscFreq = sampleRate / static_cast<float>(targetTablesize);
+
+        const Wavetable table {selectedSamples, sampleRate / 2.f};
+        std::vector<Wavetable> wavetable {table};
+        Osc interpolationOscillator{ &wavetable, sampleRate, exportTableOscFreq};
+
+        for (int i = 0; i <targetTablesize; i++) {
+             buf[i] = interpolationOscillator++;
+        }
+        outletStatus.send("newFrame");
+        buf.dirty();
+    }
+    
     message<> generate_frame {
         this, "generate_frame", MIN_FUNCTION {
-            if (tablePreprocessor.inputSamples.empty()) {return{};}
-            if (mode == free && overlayRectFree.visible) {
-                targetBuffer.set(targetBufferName);
-                buffer_lock<false> buf(targetBuffer);
-		      if (!buf.valid())
-					return {};
-                const int targetTablesize = buf.frame_count();
-                float widthDivNSampsFactor = tablePreprocessor.inputSamples.size() / width; //Consider margin?
-                //int firstIdx = round(static_cast<float>(overlayRectFree.getStartX() - margin) * widthDivNSampsFactor);
-                //int lastIdx = round(static_cast<float>(overlayRectFree.getStartX() + overlayRectFree.getWidth() - margin) * widthDivNSampsFactor);  //Segmentation fault possible?
-		      if (std::abs(selection.first - selection.second) < 3)
-		      	return {};
-		      int                firstIdx = round(selection.first);
-		      int                lastIdx  = round(selection.second);
-                std::vector<float> selectedSamples {tablePreprocessor.inputSamples.begin() + firstIdx, tablePreprocessor.inputSamples.begin() + lastIdx};   //Segmentation fault possible?
-                float exportTableOscFreq = sampleRate / static_cast<float>(targetTablesize);
-
-                Wavetable table {selectedSamples, sampleRate / 2.f};
-                std::vector<Wavetable> wavetable {table};
-                Osc interpolationOscillator{ &wavetable, sampleRate, exportTableOscFreq};
-
-                for (int i = 0; i <targetTablesize; i++) {
-                     buf[i] = interpolationOscillator++;
-                }
-                outletStatus.send("newFrame");
-                buf.dirty();
-                buf.~buffer_lock(); //redundant
-            } else if (mode == zeros && overlayRectZeros.visible) {
-                
+            
+            if (mode == Mode::free) {
+                exportFrame(std::round(freeSelection.first), std::round(freeSelection.second));
+            } else if (mode == Mode::zeros) {
+                    exportFrame(std::round(zerosSelection.first), std::round(zerosSelection.second));
             }
             return {};
         }
     };
 
-    void updateSelection(const Butterfly::Point& mouseDownPoint, const Butterfly::Point& currentMousePoint) {
+    void updateFreeSelection(const Butterfly::Point& mouseDownPoint, const Butterfly::Point& currentMousePoint) {
 		const auto selectionValueRect = transform.from({mouseDownPoint, currentMousePoint});
-		selection.first               = std::clamp(selectionValueRect.x, 0., tablePreprocessor.inputSamples.size() - 1.0);
-		selection.second = std::clamp(selectionValueRect.x + selectionValueRect.width, 0., tablePreprocessor.inputSamples.size() - 1.0);
+		freeSelection.first               = std::clamp(selectionValueRect.x, 0., tablePreprocessor.inputSamples.size() - 1.0);
+		freeSelection.second = std::clamp(selectionValueRect.x + selectionValueRect.width, 0., tablePreprocessor.inputSamples.size() - 1.0);
     }
     
+    void updateZerosSelection(const Butterfly::Point& mouseDownPoint, const Butterfly::Point& currentMousePoint){
+        double nearestCrossing1 = nearestZeroCrossing(transform.fromX(mouseDownPoint.x));
+        double nearestCrossing2 = nearestZeroCrossing(transform.fromX(currentMousePoint.x));
+        zerosSelection.first               = std::clamp(nearestCrossing1, 0., tablePreprocessor.inputSamples.size() - 1.0);
+        zerosSelection.second = std::clamp(nearestCrossing2, 0., tablePreprocessor.inputSamples.size() - 1.0);
+        if (zerosSelection.second < zerosSelection.first) {std::swap(zerosSelection.second, zerosSelection.first);}
+    }
     
-    void drawSamples(target t) {        //Das allgemeingültig schreiben und auch bei StakcedFrames verwenden!
-	   if (tablePreprocessor.inputSamples.empty()) return;
-	   lib::interpolator::linear<> linearInterpolator;
-        auto r = transform.apply(dataRange);
-	   //rect<fill> {t, color {overlayColor}, position {r.x, r.y}, size {r.width, r.height}};
-
-
-        float position{};
-        const auto point = transform.apply({static_cast<double>(0), tablePreprocessor.inputSamples[0]});
+    void drawSamples(target t) {        //Das allgemeingültig schreiben und auch bei StackedFrames verwenden!
+        if (tablePreprocessor.inputSamples.empty()) return;
+        const auto point = transform.apply({static_cast<double>(0), -tablePreprocessor.inputSamples[0] * waveformYScaling});
         auto last = point;
-        int inputSampleSize = static_cast<int>(tablePreprocessor.inputSamples.size()) - 1;      //Zero based counting
-        float delta = static_cast<float>(inputSampleSize) / width;
-        for (int i = 1; i < static_cast<int>(width); ++i) {
-            int lowerSmplIdx = floor(position);
-            int upperSmplIdx = ceil(position);
-            upperSmplIdx = upperSmplIdx > inputSampleSize ? (inputSampleSize) : upperSmplIdx;       //prevent segmentation fault
-            float interpolatedValue = linearInterpolator(tablePreprocessor.inputSamples[lowerSmplIdx], tablePreprocessor.inputSamples[upperSmplIdx], delta) * waveformYScaling;
-            //float currentY = ((interpolatedValue - 1.f) * -0.5f * height) + margin;
-            //int currentX = i + static_cast<int>(margin);
+        for (int i = 1; i < tablePreprocessor.inputSamples.size(); ++i) {
 
-            const auto point = transform.apply({static_cast<double>(position), interpolatedValue});
+            const auto point = transform.apply({static_cast<double>(i), -tablePreprocessor.inputSamples[i] * waveformYScaling});
 
             line<stroke> {
                 t,
@@ -362,51 +334,38 @@ public:
                 destination{point.x, point.y},
                 line_width { strokeWidth }
             };
-            position += delta;
-		  last = point;
+          last = point;
         }
     }
     
     void drawZeroCrossings(target t) {
-        float factor = width / static_cast<float>(tablePreprocessor.inputSamples.size());
-        int lowerY{static_cast<int>(margin)}, upperY{static_cast<int>(height + margin)};
-        for (int i = 0; i < tablePreprocessor.zeroCrossings.size(); ++i) {
-            int x = static_cast<int>(tablePreprocessor.zeroCrossings[i] * factor + margin);
+        for (double value : tablePreprocessor.zeroCrossings) {
+            auto p1 = transform.apply({value, 1.});
+            auto p2 = transform.apply({value, -1.});
+//            int x = static_cast<int>(tablePreprocessor.zeroCrossings[i] * factor + margin);
             line<stroke> {
                 t,
                 color { zeroCrossingsColor },
-                origin { x, lowerY },
-                destination { x, upperY },
+                origin { p1.x, p1.y },
+                destination { p2.x, p2.y },
                 line_width { strokeWidth }
             };
         }
     }
     
     void drawOverlayRects(target t) {
-		if (!overlayRectFree.visible)
-			return;
-		if (selection.first == selection.second)
-			return;
-		const auto r = transform.apply({{selection.first, 1}, {selection.second, -1}});
-          rect<fill> { t, color { overlayColor }, position {r.x, r.y}, size {r.width, r.height}};
-        //if (overlayRectFree.visible && (overlayRectFree.x1 != overlayRectFree.x2)) {
-        //    cout << "OverlayRectFree Width: "<< overlayRectFree.getWidth() << endl; //size 0 ist schlecht
-        //    rect<fill> {
-        //        t,
-        //        color { overlayColor },
-        //        position { static_cast<float>(overlayRectFree.getStartX()), margin },
-        //        size { static_cast<float>(overlayRectFree.getWidth()), height }
-        //    };
-        //} else if (overlayRectZeros.visible  && (overlayRectZeros.x1 != overlayRectZeros.x2)) {
-        //    rect<fill> {
-        //        t,
-        //        color { overlayColor },
-        //        position { static_cast<float>(overlayRectZeros.getStartX()), margin },
-        //        size { static_cast<float>(overlayRectZeros.getWidth()), height }
-        //    };
-        //}
+        if (mode == Mode::free) {
+            if (freeSelection.first == freeSelection.second)
+                return;
+            const auto r = transform.apply({{freeSelection.first, 1}, {freeSelection.second, -1}});
+              rect<fill> { t, color { overlayColor }, position {r.x, r.y}, size {r.width, r.height}};
+        } else if (mode == Mode::zeros) {
+            if (zerosSelection.first == zerosSelection.second)
+                return;
+            const auto r = transform.apply({{zerosSelection.first, 1}, {zerosSelection.second, -1}});
+              rect<fill> { t, color { overlayColor }, position {r.x, r.y}, size {r.width, r.height}};
+        }
     }
-
 
     void inputSamplesChanged() {
 		dataRange = Butterfly::Rect::fromBounds(0, tablePreprocessor.inputSamples.size(), -1, 1);
@@ -443,7 +402,7 @@ public:
             
             if (tablePreprocessor.inputSamples.size() > 0) {
                 drawOverlayRects(t);
-                if ((tablePreprocessor.zeroCrossings.size() > 0) && (mode == zeros)) {
+                if ((tablePreprocessor.zeroCrossings.size() > 0) && (mode == Mode::zeros)) {
                     drawZeroCrossings(t);
                 }
                 drawSamples(t);

@@ -38,7 +38,7 @@ private:
     
     MultiFrameOsc multiFrameOsc;
 
-    Butterfly::RampedValue<float> outputGain{0.f, 1000};
+    Butterfly::RampedValue<float> outputGain{0.f, 150};
     
 public:
     MIN_DESCRIPTION     { "Display and edit stacked frames." };

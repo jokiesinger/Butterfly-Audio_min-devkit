@@ -20,6 +20,7 @@ include_directories(
 set( SOURCE_FILES
 	${PROJECT_NAME}.cpp
 	table_preprocessing_helper_functions.h
+	graphics_transform.h
 )
 
 
