@@ -37,7 +37,20 @@ private:
     float sampleRate{48000.f};
     int internalTablesize{2048};
     float width{}, height{};
+
+    // mouse event related
     bool mouseDown{false};
+    enum class Button { Left, Right, Center };
+    Butterfly::Point mouseDownPoint, currentMousePoint;
+    Button   button {};
+    bool     dragging {false};
+
+    // transform related
+    Butterfly::Rect      dataRange;    // size of the draw target, will be updated on first draw.
+    Butterfly::Point     targetSize {100, 100};    // size of the draw target, will be updated on first draw.
+    Butterfly::Rect      waveformView {{}, targetSize};        // size of the draw target, will be updated on first draw.
+    Butterfly::Transform transform;
+    std::pair<double,double>     selection;
     
 public:
     MIN_DESCRIPTION     { "Read from a buffer~ and display." };
@@ -170,11 +183,6 @@ public:
 //        cout << "ZeroCrossing: " << zeroCrossing << endl;
         return zeroCrossing;
 	}
-
-	enum class Button { Left, Right, Center };
-     Butterfly::Point mouseDownPoint, currentMousePoint;
-     Button   button {};
-     bool     dragging {false};
     
     message<> mousedown {
         this, "mousedown", MIN_FUNCTION {
@@ -259,12 +267,6 @@ public:
         }
     };
 
-    void updateSelection(const Butterfly::Point& mouseDownPoint, const Butterfly::Point& currentMousePoint) {
-		const auto selectionValueRect = transform.from({mouseDownPoint, currentMousePoint});
-		selection.first               = std::clamp(selectionValueRect.x, 0., tablePreprocessor.inputSamples.size() - 1.0);
-		selection.second = std::clamp(selectionValueRect.x + selectionValueRect.width, 0., tablePreprocessor.inputSamples.size() - 1.0);
-    }
-    
     message<> mousedrag {
         this, "mousedrag", MIN_FUNCTION {
             if (tablePreprocessor.inputSamples.empty()) {return{};}
@@ -323,6 +325,13 @@ public:
             return {};
         }
     };
+
+    void updateSelection(const Butterfly::Point& mouseDownPoint, const Butterfly::Point& currentMousePoint) {
+		const auto selectionValueRect = transform.from({mouseDownPoint, currentMousePoint});
+		selection.first               = std::clamp(selectionValueRect.x, 0., tablePreprocessor.inputSamples.size() - 1.0);
+		selection.second = std::clamp(selectionValueRect.x + selectionValueRect.width, 0., tablePreprocessor.inputSamples.size() - 1.0);
+    }
+    
     
     void drawSamples(target t) {        //Das allgemeingültig schreiben und auch bei StakcedFrames verwenden!
 	   if (tablePreprocessor.inputSamples.empty()) return;
@@ -416,11 +425,6 @@ public:
 		transform.ensureWithin(dataRange, waveformView);
 	}
 
-	Butterfly::Rect      dataRange;    // size of the draw target, will be updated on first draw.
-	Butterfly::Point     targetSize {100, 100};    // size of the draw target, will be updated on first draw.
-	Butterfly::Rect      waveformView {{}, targetSize};        // size of the draw target, will be updated on first draw.
-	Butterfly::Transform transform;
-	std::pair<double,double>     selection;
     
     message<> paint {
         this, "paint", MIN_FUNCTION {
