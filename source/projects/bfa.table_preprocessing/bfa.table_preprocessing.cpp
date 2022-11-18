@@ -241,7 +241,7 @@ public:
                 targetBuffer.set(targetBufferName);
                 buffer_lock<false> buf(targetBuffer);
                 int targetTablesize = buf.frame_count();
-                float widthDivNSampsFactor = tablePreprocessor.inputSamples.size() / width; //Consider margin?
+                float widthDivNSampsFactor = tablePreprocessor.inputSamples.size() / width;
                 int firstIdx = round(static_cast<float>(overlayRectFree.getStartX() - margin) * widthDivNSampsFactor);
                 int lastIdx = round(static_cast<float>(overlayRectFree.getStartX() + overlayRectFree.getWidth() - margin) * widthDivNSampsFactor);  //Segmentation fault possible?
                 std::vector<float> selectedSamples {tablePreprocessor.inputSamples.begin() + firstIdx, tablePreprocessor.inputSamples.begin() + lastIdx};   //Segmentation fault possible?
@@ -261,7 +261,29 @@ public:
                 buf.dirty();
                 buf.~buffer_lock();
             } else if (mode == zeros && overlayRectZeros.visible) {
-                
+                targetBuffer.set(targetBufferName);
+                buffer_lock<false> buf(targetBuffer);
+                int targetTablesize = buf.frame_count();
+                float widthDivNSampsFactor = tablePreprocessor.inputSamples.size() / width;
+                ///TODO: be more precise! find exact zero crossing - now pixel grid is granularity level!
+                int firstIdx = round(static_cast<float>(overlayRectZeros.getStartX() - margin) * widthDivNSampsFactor);
+                int lastIdx = round(static_cast<float>(overlayRectZeros.getStartX() + overlayRectZeros.getWidth() - margin) * widthDivNSampsFactor);  //Segmentation fault possible?
+                std::vector<float> selectedSamples {tablePreprocessor.inputSamples.begin() + firstIdx, tablePreprocessor.inputSamples.begin() + lastIdx};   //Segmentation fault possible?
+                Osc interpolationOscillator{};
+                float exportTableOscFreq = sampleRate / static_cast<float>(targetTablesize);
+                Wavetable table {selectedSamples, sampleRate / 2.f};
+                std::vector<Wavetable> wavetable {table};
+                interpolationOscillator.setTable(&wavetable);
+                interpolationOscillator.setSampleRate(sampleRate);
+                interpolationOscillator.setFrequency(exportTableOscFreq);
+                if (buf.valid()) {
+                    for (int i = 0; i <targetTablesize; i++) {
+                        buf[i] = interpolationOscillator++;
+                    }
+                }
+                outletStatus.send("newFrame");
+                buf.dirty();
+                buf.~buffer_lock();
             }
             return {};
         }
