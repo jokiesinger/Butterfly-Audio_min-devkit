@@ -25,7 +25,6 @@ private:
     OverlayRect overlayRectFree{};
     OverlayRect overlayRectZeros{};
     TablePreprocessor tablePreprocessor;
-//    SampleSelection sampleSelection{};
     
     enum class Mode {free, zeros, period};
     Mode mode{Mode::free};
