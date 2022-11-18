@@ -1,6 +1,16 @@
 cmake_minimum_required(VERSION 3.19)
 project(Min-DevKit)
 
+# Fix behaviour of CMAKE_CXX_STANDARD when targeting MacOS
+If (POLICY CMP0025)
+	cmake_policy(SET CMP0025 NEW)
+endif()
+
+# target_compile_features(Butterfly-Audio_min-devkit PUBLIC cxx_std_20)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED True)
+
 enable_testing()
 
 string(REGEX REPLACE "(.*)/" "" THIS_PACKAGE_NAME "${CMAKE_CURRENT_SOURCE_DIR}")
@@ -34,6 +44,15 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/source/min-api/script/min-package.cmake)
 if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/source/min-lib/CMakeLists.txt")
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/source/min-lib)
 endif ()
+
+# Add the Butterfly Audio Library
+add_subdirectory(submodules/Butterfly_Audio_Library)
+
+#Add library to executable?
+#target_link_libraries(Min-DevKit
+#		INTERFACE
+#		Butterfly_Audio_Library
+#)	
 
 
 # Generate a project for every folder in the "source/projects" folder
