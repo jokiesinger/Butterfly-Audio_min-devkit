@@ -20,8 +20,8 @@ void fillRect(target& t, const Butterfly::Rect& r, const color& c) {
 	rect<fill> rect{ t, color{ c }, position{ r.x, r.y }, size{ r.width, r.height } };
 }
 
-void drawRect(target& t, const Butterfly::Rect& r, const color& c) {
-	rect<stroke> rect{ t, color{ c }, position{ r.x, r.y }, size{ r.width, r.height } };
+void drawRect(target& t, const Butterfly::Rect& r, const color& c, double strokeWidth = 1.0) {
+	rect<stroke> rect{ t, color{ c }, position{ r.x, r.y }, size{ r.width, r.height }, line_width{ strokeWidth } };
 }
 
 void drawLine(target& t, const Butterfly::Point& p1, const Butterfly::Point& p2, const color& c, double strokeWidth = 1.0) {
@@ -91,7 +91,7 @@ public:
 	attribute<color> waveformColor{ this, "Color Waveform ", color::predefined::black };
 	attribute<color> zeroCrossingsColor{ this, "Color Zero Crossings", { .88f, .88f, .88f, 1.f } };
 	attribute<color> overlayColor{ this, "Color Overlay", { 0.f, .9f, .9f, .3f } };
-	attribute<color> draggingRectColor{ this, "Color of rectangle that is shown when drag-zooming into the sample", { .5f, .5f, .5f, 1.f } };
+	attribute<color> draggingRectColor{ this, "Color of rectangle that is shown when drag-zooming into the sample", { .2f, .2f, .2f, 1.f } };
 
 	attribute<number> strokeWidth{ this, "Stroke Width Samples", 1.f };
 	attribute<number> strokeWidthSelection{ this, "Stroke Width Selected Samples", 1.f };
@@ -343,12 +343,21 @@ void table_preprocessing::drawSamples(target& t) { //Das allgemeingültig schrei
 
 void table_preprocessing::drawDraggingRect(target& t) {
 	if (dragging && button == Button::Right) {
+
+		c74::max::t_jgraphics* g = t;
+		double a[] = { 4, 4 };
+		jgraphics_set_dash(g, a, 2, 0);
+
+		//rect<stroke> rect1{ t, color{ waveformColor }, position{ 30, 30 }, size{ 50, 50 } };
+
+		//rect<stroke> rect2{ t, color{ waveformColor }, position{ 20, 20 }, size{ 50, 50 } };
 		Butterfly::Rect rect = { currentMousePoint, mouseDownPoint };
 		rect.y = margin;
 		rect.height = t.height() - 2 * margin;
 		if (rect.width > 0) {
-			drawRect(t, rect, draggingRectColor);
+			drawRect(t, rect, draggingRectColor, 1.0);
 		}
+		jgraphics_set_dash(g, 0, 0, 0);
 	}
 }
 
@@ -428,15 +437,19 @@ void table_preprocessing::mousedownImpl(const Butterfly::Point& point, Button bu
 void table_preprocessing::mousedragImpl(const Butterfly::Point& point, Button button) {
 	if (tablePreprocessor.inputSamples.empty())
 		return;
-	currentMousePoint = point;
 
 	if (button == Button::Left) {
 		if (mode == Mode::free) {
-			updateFreeSelection(mouseDownPoint, currentMousePoint);
+			updateFreeSelection(mouseDownPoint, point);
 		} else if (mode == Mode::zeros) {
-			updateZerosSelection(mouseDownPoint, currentMousePoint);
+			updateZerosSelection(mouseDownPoint, point);
 		}
+	} else if (button == Button::Center) {
+		auto p = point - currentMousePoint;
+		transform.preTranslate(p);
+		constrainViewTransform();
 	}
+	currentMousePoint = point;
 	redraw();
 }
 
