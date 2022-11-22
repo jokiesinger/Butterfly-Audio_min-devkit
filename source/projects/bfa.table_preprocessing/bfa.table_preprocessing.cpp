@@ -459,16 +459,15 @@ void table_preprocessing::mouseupImpl(const Butterfly::Point& point, Button butt
 	currentMousePoint = point;
 	if (button == Button::Left) {
 		if (mode == Mode::free) {
-			updateFreeSelection(mouseDownPoint, currentMousePoint);
+			updateFreeSelection(mouseDownPoint, point);
 		} else if (mode == Mode::zeros) {
-			updateZerosSelection(mouseDownPoint, currentMousePoint);
+			updateZerosSelection(mouseDownPoint, point);
 		}
 	} else if (button == Button::Right) {
 		if (dragging) {
-			Butterfly::Rect r{ mouseDownPoint - waveformView.topLeft(), currentMousePoint - waveformView.topLeft() };
+			Butterfly::Rect r{ mouseDownPoint, point };
 			r.y = waveformView.y;
 			r.height = waveformView.height;
-			r.x -= margin;
 			if (r.width > 0) {
 				auto r2 = transform.from(r);
 				transform = Butterfly::Transform::MapRect(r2, waveformView);
