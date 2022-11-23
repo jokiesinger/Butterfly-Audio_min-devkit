@@ -88,6 +88,7 @@ public:
     }
     
     bool moveUpSelectedFrame() {
+        if (frames.empty()) {return false;}
         int selectedFrameIdx = getSelectedFrameIdx();
         if (selectedFrameIdx == 0) { return false; }
         std::swap(frames[selectedFrameIdx], frames[selectedFrameIdx - 1]);
@@ -95,6 +96,7 @@ public:
     }
     
     bool moveDownSelectedFrame() {
+        if (frames.empty()) {return false;}
         int selectedFrameIdx = getSelectedFrameIdx();
         if (selectedFrameIdx >= (frames.size() - 1)) { return false; }
         std::swap(frames[selectedFrameIdx], frames[selectedFrameIdx + 1]);
@@ -112,9 +114,10 @@ public:
     
     bool removeSelectedFrame()
     {
+        if (frames.empty()) {return false;}
         int selectedFrameIdx = getSelectedFrameIdx();
+        if (frames.size() < selectedFrameIdx) {return false;}
         frames.erase(frames.begin() + selectedFrameIdx);
-        //TODO: wie vermeide ich am elegantesten einen segmentation fault?
         if (selectedFrameIdx >= frames.size()) {
             frames.back().isSelected = true;
         } else if (selectedFrameIdx < frames.size()) {

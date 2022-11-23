@@ -42,19 +42,14 @@
 			<description></description>
 		</method>
 
-		<method name='setMode'>
-			<digest>Set frame selection mode (custom, period)</digest>
-			<description>Set frame selection mode (custom, period). </description>
-		</method>
-
 		<method name='sampleDropped'>
 			<digest>Read again from the buffer~</digest>
 			<description>Read again from the buffer~. </description>
 		</method>
 
-		<method name='set'>
-			<digest>Choose a named buffer~ from which to read</digest>
-			<description>Choose a named buffer~ from which to read. </description>
+		<method name='setMode'>
+			<digest>Set frame selection mode (custom, period)</digest>
+			<description>Set frame selection mode (custom, period). </description>
 		</method>
 
 	</methodlist>
@@ -64,7 +59,7 @@
 
 	<attributelist>
 
-		<attribute name='Waveform Y Scaling Factor' get='1' set='1' type='float64' size='1' >
+		<attribute name='Mouse wheel zoom speed' get='1' set='1' type='float64' size='1' >
 			<digest></digest>
 			<description></description>
 		</attribute>
@@ -74,12 +69,12 @@
 			<description>Name of buffer~ to read from. </description>
 		</attribute>
 
-		<attribute name='Color Overlay' get='1' set='1' type='float64' size='1' >
-			<digest></digest>
-			<description></description>
+		<attribute name='Target Buffer' get='1' set='1' type='symbol' size='1' >
+			<digest>Name of buffer~ to write to </digest>
+			<description>Name of buffer~ to write to </description>
 		</attribute>
 
-		<attribute name='Color Zero Crossings' get='1' set='1' type='float64' size='1' >
+		<attribute name='Stroke Width Samples' get='1' set='1' type='float64' size='1' >
 			<digest></digest>
 			<description></description>
 		</attribute>
@@ -89,17 +84,32 @@
 			<description></description>
 		</attribute>
 
+		<attribute name='Color Zero Crossings' get='1' set='1' type='float64' size='1' >
+			<digest></digest>
+			<description></description>
+		</attribute>
+
+		<attribute name='Waveform Y Scaling Factor' get='1' set='1' type='float64' size='1' >
+			<digest></digest>
+			<description></description>
+		</attribute>
+
+		<attribute name='Color of rectangle that is shown when drag-zooming into the sample' get='1' set='1' type='float64' size='1' >
+			<digest></digest>
+			<description></description>
+		</attribute>
+
+		<attribute name='Color Overlay' get='1' set='1' type='float64' size='1' >
+			<digest></digest>
+			<description></description>
+		</attribute>
+
 		<attribute name='Color Waveform ' get='1' set='1' type='float64' size='1' >
 			<digest></digest>
 			<description></description>
 		</attribute>
 
-		<attribute name='Target Buffer' get='1' set='1' type='symbol' size='1' >
-			<digest>Name of buffer~ to write to </digest>
-			<description>Name of buffer~ to write to </description>
-		</attribute>
-
-		<attribute name='Stroke Width Samples' get='1' set='1' type='float64' size='1' >
+		<attribute name='Mouse wheel zoom speed (applied when Ctrl is down)' get='1' set='1' type='float64' size='1' >
 			<digest></digest>
 			<description></description>
 		</attribute>

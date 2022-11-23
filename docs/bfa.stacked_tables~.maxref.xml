@@ -41,12 +41,12 @@
 			<description></description>
 		</method>
 
-		<method name='set_freq'>
+		<method name='move_up_selected_frame'>
 			<digest></digest>
 			<description></description>
 		</method>
 
-		<method name='morph_position'>
+		<method name='clear_all'>
 			<digest></digest>
 			<description></description>
 		</method>
@@ -71,24 +71,19 @@
 			<description></description>
 		</method>
 
+		<method name='set_freq'>
+			<digest></digest>
+			<description></description>
+		</method>
+
+		<method name='morph_position'>
+			<digest></digest>
+			<description></description>
+		</method>
+
 		<method name='add_frame'>
 			<digest>Read from input buffer </digest>
 			<description>Read from input buffer </description>
-		</method>
-
-		<method name='move_up_selected_frame'>
-			<digest></digest>
-			<description></description>
-		</method>
-
-		<method name='clear_all'>
-			<digest></digest>
-			<description></description>
-		</method>
-
-		<method name='set'>
-			<digest>Choose a named buffer~ from which to read</digest>
-			<description>Choose a named buffer~ from which to read. </description>
 		</method>
 
 	</methodlist>

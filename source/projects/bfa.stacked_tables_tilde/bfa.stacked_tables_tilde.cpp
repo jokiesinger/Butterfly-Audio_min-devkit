@@ -280,8 +280,8 @@ public:
                 t,
                 color {background_color}
             };
-            draw_morphable_frame(t);
             for (int i = 0; i < nActiveFrames; i++) { drawStackedFrames(i, t); }
+            draw_morphable_frame(t);
             
             return {};
         }
