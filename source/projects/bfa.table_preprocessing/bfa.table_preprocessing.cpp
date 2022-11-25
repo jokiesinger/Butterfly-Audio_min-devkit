@@ -28,6 +28,11 @@ void drawLine(target& t, const Butterfly::Point& p1, const Butterfly::Point& p2,
 	line<stroke> line{ t, color{ c }, origin{ p1.x, p1.y }, destination{ p2.x, p2.y }, line_width{ strokeWidth } };
 }
 
+
+void drawPoint(target& t, const Butterfly::Point& p1, const color& c, double siz = 1.0) {
+	ellipse<fill> line{ t, color{ c }, position{ p1.x - siz * .5, p1.y - siz * .5 }, size{ siz , siz } };
+}
+
 enum class Button {
 	Left,
 	Right,
@@ -127,6 +132,7 @@ public:
 			const double speed = e.is_command_key_down() ? fastZoomSpeed : zoomSpeed;
 
 			const auto d = e.wheel_delta_y() > 0 ? speed : 1 / speed;
+			if (d > 1. && transform.apply({ 0, 0, 1, 0 }).width > targetSize.x) return {};
 			transform.scaleAround(e.x(), e.y(), d, 1);
 			constrainViewTransform();
 			redraw();
@@ -162,11 +168,7 @@ public:
 
 	message<> generate_frame{
 		this, "generate_frame", [this](const c74::min::atoms& args, const int inlet) -> c74::min::atoms {
-			if (mode == Mode::free) {
-				exportFrame(std::round(freeSelection.first), std::round(freeSelection.second));
-			} else if (mode == Mode::zeros) {
-				exportFrame(std::round(zerosSelection.first), std::round(zerosSelection.second));
-			}
+			exportFrame();
 			return {};
 		}
 	};
@@ -206,7 +208,10 @@ public:
 	void inputSamplesChanged();
 	void sampleDroppedImpl();
 	void setSampleData(const std::vector<float>& data);
-	void exportFrame(int begin, int end);
+	bool canExport() const;
+	std::pair<int, int> getCurrentExportRange() const;
+	bool exportFrame();
+	void notifyCanExportStatus();
 
 	void updateFreeSelection(const Butterfly::Point& mouseDownPoint, const Butterfly::Point& currentMousePoint);
 	void updateZerosSelection(const Butterfly::Point& mouseDownPoint, const Butterfly::Point& currentMousePoint);
@@ -292,6 +297,7 @@ void table_preprocessing::setup(float sampleRate) {
 void table_preprocessing::setModeImpl(Mode newMode) {
 	mode = newMode;
 	redraw();
+	notifyCanExportStatus();
 }
 
 
@@ -299,6 +305,7 @@ void table_preprocessing::updateFreeSelection(const Butterfly::Point& mouseDownP
 	const auto selectionValueRect = transform.from({ mouseDownPoint, currentMousePoint });
 	freeSelection.first = std::clamp(selectionValueRect.x, 0., samplePreprocessor.inputSamples.size() - 1.0);
 	freeSelection.second = std::clamp(selectionValueRect.x + selectionValueRect.width, 0., samplePreprocessor.inputSamples.size() - 1.0);
+	notifyCanExportStatus();
 }
 
 void table_preprocessing::updateZerosSelection(const Butterfly::Point& mouseDownPoint, const Butterfly::Point& currentMousePoint) {
@@ -307,17 +314,34 @@ void table_preprocessing::updateZerosSelection(const Butterfly::Point& mouseDown
 	zerosSelection.first = std::clamp(nearestCrossing1, 0., samplePreprocessor.inputSamples.size() - 1.0);
 	zerosSelection.second = std::clamp(nearestCrossing2, 0., samplePreprocessor.inputSamples.size() - 1.0);
 	if (zerosSelection.second < zerosSelection.first) { std::swap(zerosSelection.second, zerosSelection.first); }
+	notifyCanExportStatus();
 }
 
-void table_preprocessing::exportFrame(int begin, int end) {
-	if (samplePreprocessor.inputSamples.empty()) return;
-	if (end <= begin) return;
-	if (begin < 0 || end >= samplePreprocessor.inputSamples.size()) return;
-	if (std::abs(begin - end) < Wavetable::minimumInputSize()) return;
+bool table_preprocessing::canExport() const {
+	const auto [begin, end] = getCurrentExportRange();
+	if (samplePreprocessor.inputSamples.empty()) return false;
+	if (end <= begin) return false;
+	if (begin < 0 || end >= samplePreprocessor.inputSamples.size()) return false;
+	if (std::abs(begin - end) < Wavetable::minimumInputSize()) return false;
+	return true;
+}
+
+std::pair<int, int> table_preprocessing::getCurrentExportRange() const {
+	if (mode == Mode::free) {
+		return { std::round(freeSelection.first), std::round(freeSelection.second) };
+	} else if (mode == Mode::zeros) {
+		return { std::round(zerosSelection.first), std::round(zerosSelection.second) };
+	}
+	return {};
+}
+
+bool table_preprocessing::exportFrame() {
+	if (!canExport()) return false;
+	const auto [begin, end] = getCurrentExportRange();
 
 	targetBuffer.set(targetBufferName);
 	buffer_lock<false> buf(targetBuffer);
-	if (!buf.valid()) return;
+	if (!buf.valid()) return false;
 	const int targetTablesize = buf.frame_count();
 	const std::vector<float> selectedSamples{ samplePreprocessor.inputSamples.begin() + begin, samplePreprocessor.inputSamples.begin() + end };
 	const float exportTableOscFreq = sampleRate / static_cast<float>(targetTablesize);
@@ -331,6 +355,15 @@ void table_preprocessing::exportFrame(int begin, int end) {
 	}
 	outletStatus.send("newFrame");
 	buf.dirty();
+	return true;
+}
+
+void table_preprocessing::notifyCanExportStatus() {
+	if (canExport()) {
+		outletStatus.send("CanExportStatus", 1);
+	} else {
+		outletStatus.send("CanExportStatus", 0);
+	}
 }
 
 void table_preprocessing::drawSamples(target& t) { //Das allgemeingültig schreiben und auch bei StackedFrames verwenden!
@@ -421,6 +454,7 @@ void table_preprocessing::sampleDroppedImpl() {
 		data.push_back(buf.lookup(i, 0));
 	}
 	setSampleData(data);
+	notifyCanExportStatus();
 }
 
 void table_preprocessing::setSampleData(const std::vector<float>& data) {
