@@ -376,6 +376,13 @@ void table_preprocessing::drawSamples(target& t) { //Das allgemeingültig schrei
 		drawLine(t, previous, point, waveformColor, strokeWidth);
 		previous = point;
 	}
+
+	if (transform.apply({ 0, 0, 1, 0 }).width > targetSize.x / 20.) {
+		for (int i = 0; i < samplePreprocessor.inputSamples.size(); ++i) {
+			const auto point = transform.apply({ static_cast<double>(i), -samplePreprocessor.inputSamples[i] * waveformYScaling });
+			drawPoint(t, point, waveformColor, 5.0);
+		}
+	}
 }
 
 void table_preprocessing::drawDraggingRect(target& t) {
