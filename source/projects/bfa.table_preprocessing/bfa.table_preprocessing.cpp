@@ -30,7 +30,7 @@ void drawLine(target& t, const Butterfly::Point& p1, const Butterfly::Point& p2,
 
 
 void drawPoint(target& t, const Butterfly::Point& p1, const color& c, double siz = 1.0) {
-	ellipse<fill> line{ t, color{ c }, position{ p1.x - siz * .5, p1.y - siz * .5 }, size{ siz , siz } };
+	ellipse<fill> line{ t, color{ c }, position{ p1.x - siz * .5, p1.y - siz * .5 }, size{ siz, siz } };
 }
 
 enum class Button {
@@ -369,16 +369,22 @@ void table_preprocessing::notifyCanExportStatus() {
 void table_preprocessing::drawSamples(target& t) { //Das allgemeingültig schreiben und auch bei StackedFrames verwenden!
 	if (samplePreprocessor.inputSamples.empty()) return;
 
-	const auto point = transform.apply({ static_cast<double>(0), -samplePreprocessor.inputSamples[0] * waveformYScaling });
+	// get first/last visible sample
+	const int first = std::max(0., transform.fromX(0)-1.);
+	const int last = std::min<double>(samplePreprocessor.inputSamples.size(), std::ceil(transform.fromX(targetSize.x) + 1.));
+	const int step = std::max<int>(1,(last - first) / (targetSize.x * 5.));
+
+	const auto point = transform.apply({ static_cast<double>(first), -samplePreprocessor.inputSamples[first] * waveformYScaling });
 	auto previous = point;
-	for (int i = 1; i < samplePreprocessor.inputSamples.size(); ++i) {
-		const auto point = transform.apply({ static_cast<double>(i), -samplePreprocessor.inputSamples[i] * waveformYScaling });
+	for (int i = first + step; i < last; i += step) {
+		auto sample = *std::max_element(samplePreprocessor.inputSamples.begin() + i - step, samplePreprocessor.inputSamples.begin() + i, [](auto a, auto b) { return std::abs(a) < std::abs(b); });
+		const auto point = transform.apply({ static_cast<double>(i), -sample * waveformYScaling });
 		drawLine(t, previous, point, waveformColor, strokeWidth);
 		previous = point;
 	}
 
 	if (transform.apply({ 0, 0, 1, 0 }).width > targetSize.x / 20.) {
-		for (int i = 0; i < samplePreprocessor.inputSamples.size(); ++i) {
+		for (int i = first; i < last; ++i) {
 			const auto point = transform.apply({ static_cast<double>(i), -samplePreprocessor.inputSamples[i] * waveformYScaling });
 			drawPoint(t, point, waveformColor, 5.0);
 		}
