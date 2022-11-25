@@ -408,8 +408,8 @@ void table_preprocessing::constrainViewTransform() {
 void table_preprocessing::sampleDroppedImpl() {
 	inputBuffer.set(inputBufferName);
 	buffer_lock<false> buf(inputBuffer);
-	if (buf.channel_count() != 1) {
-		cout << "Buffer channel count has to be one." << endl;
+	if (buf.channel_count() > 2) {
+		cout << "Buffer channel count has to be mono or stereo." << endl;
 		return;
 	}
 	if (!buf.valid()) {
