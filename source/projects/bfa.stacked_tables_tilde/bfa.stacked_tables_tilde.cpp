@@ -29,7 +29,7 @@ private:
     
     float sampleRate{48000.f};
 
-    float oscFreq{80.f};
+    float oscFreq{77.78};
     static constexpr int internalTablesize{2048};   //Die wollen wir nicht ändern
     static constexpr int maxFrames{16};
     
@@ -93,7 +93,7 @@ public:
     };
     
     attribute<double> oscillatorFreq {
-        this, "Osc Freq", 80., description{"Oscillator Frequency."}
+        this, "Osc Freq", 77.78, description{"Oscillator Frequency."}
     };
          
 
@@ -221,7 +221,7 @@ public:
     message<> set_freq {
         this, "set_freq", MIN_FUNCTION {
             oscillatorFreq = std::clamp(static_cast<double>(args[0]), 1., static_cast<double>(sampleRate) / 2.);
-            multiFrameOsc.Osc.setFrequency(oscillatorFreq);
+            multiFrameOsc.Osc.setFrequency(oscillatorFreq.get());
             return{};
         }
     };
@@ -243,8 +243,11 @@ public:
     message<> export_table {
         this, "export_table", MIN_FUNCTION {
             std::vector<float> stackedTable;
-            if (multiFrameOsc.stackedFrames.getStackedTable(stackedTable, export_tablesize, sampleRate) != 0) {
+            if (!multiFrameOsc.stackedFrames.getStackedTable(stackedTable, export_tablesize.get(), sampleRate)) {
                 cout << "No table to export.\n";
+                //message_out("export_buffer_length", export_tablesize.get());  //This would make export of zero table possible
+                //message_out("exporting_done");
+                return{};
             }
             message_out("export_buffer_length", stackedTable.size());    //set buffer~ size
             output_buffer.set(output_buffer_name);
