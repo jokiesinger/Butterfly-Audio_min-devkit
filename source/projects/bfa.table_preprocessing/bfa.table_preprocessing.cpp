@@ -370,17 +370,34 @@ void table_preprocessing::drawSamples(target& t) { //Das allgemeingültig schrei
 	if (samplePreprocessor.inputSamples.empty()) return;
 
 	// get first/last visible sample
-	const int first = std::max(0., transform.fromX(0)-1.);
+	const int first = std::max(0., transform.fromX(0) - 1.);
 	const int last = std::min<double>(samplePreprocessor.inputSamples.size(), std::ceil(transform.fromX(targetSize.x) + 1.));
-	const int step = std::max<int>(1,(last - first) / (targetSize.x * 5.));
+	const int step = std::max<int>(1, (last - first) / (targetSize.x * 10.));
 
-	const auto point = transform.apply({ static_cast<double>(first), -samplePreprocessor.inputSamples[first] * waveformYScaling });
-	auto previous = point;
-	for (int i = first + step; i < last; i += step) {
-		auto sample = *std::max_element(samplePreprocessor.inputSamples.begin() + i - step, samplePreprocessor.inputSamples.begin() + i, [](auto a, auto b) { return std::abs(a) < std::abs(b); });
-		const auto point = transform.apply({ static_cast<double>(i), -sample * waveformYScaling });
-		drawLine(t, previous, point, waveformColor, strokeWidth);
-		previous = point;
+	if (step == 1) {
+		const auto point = transform.apply({ static_cast<double>(first), -samplePreprocessor.inputSamples[first] * waveformYScaling });
+		auto previous = point;
+		for (int i = first + 1; i < last; ++i) {
+			const auto point = transform.apply({ static_cast<double>(i), -samplePreprocessor.inputSamples[i] * waveformYScaling });
+			drawLine(t, previous, point, waveformColor, strokeWidth);
+			previous = point;
+		}
+	} else if (step < 10) {
+		const auto point = transform.apply({ static_cast<double>(first), -samplePreprocessor.inputSamples[first] * waveformYScaling });
+		auto previous = point;
+		for (int i = first + step; i < last; i += step) {
+			auto sample = *std::max_element(samplePreprocessor.inputSamples.begin() + i - step, samplePreprocessor.inputSamples.begin() + i, [](auto a, auto b) { return a * a < b * b; });
+			const auto point = transform.apply({ static_cast<double>(i), -sample * waveformYScaling });
+			drawLine(t, previous, point, waveformColor, strokeWidth);
+			previous = point;
+		}
+	} else {
+		for (int i = first + step; i < last; i += step) {
+			auto [min, max] = std::minmax_element(samplePreprocessor.inputSamples.begin() + i - step, samplePreprocessor.inputSamples.begin() + i);
+			const auto p1 = transform.apply({ static_cast<double>(i), -*min * waveformYScaling });
+			const auto p2 = transform.apply({ static_cast<double>(i), -*max * waveformYScaling });
+			drawLine(t, p1, p2, waveformColor, strokeWidth);
+		}
 	}
 
 	if (transform.apply({ 0, 0, 1, 0 }).width > targetSize.x / 20.) {
@@ -411,7 +428,15 @@ void table_preprocessing::drawDraggingRect(target& t) {
 }
 
 void table_preprocessing::drawZeroCrossings(target& t) {
+	// get first/last visible sample
+	const int first = std::max(0., transform.fromX(0) - 1.);
+	const int last = std::min<double>(samplePreprocessor.inputSamples.size(), std::ceil(transform.fromX(targetSize.x) + 1.));
+	const int step = std::max<int>(1, (last - first) / (targetSize.x * 10.));
+
+	if (step > 5) return; // dont draw crossings when they get too dense
 	for (double value : samplePreprocessor.zeroCrossings) {
+		if (value < first) continue; // only draw visible crossings
+		if (value > last) break;
 		const auto p1 = transform.apply({ value, 1. });
 		const auto p2 = transform.apply({ value, -1. });
 		drawLine(t, p1, p2, zeroCrossingsColor, strokeWidth);
