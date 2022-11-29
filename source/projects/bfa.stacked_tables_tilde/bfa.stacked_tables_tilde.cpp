@@ -29,7 +29,6 @@ private:
     
     float sampleRate{48000.f};
 
-    float oscFreq{77.78};
     static constexpr int internalTablesize{2048};   //Die wollen wir nicht ändern
     static constexpr int maxFrames{16};
     
@@ -38,7 +37,7 @@ private:
     
     MultiFrameOsc multiFrameOsc;
 
-    Butterfly::RampedValue<float> outputGain{0.f, 150};
+    Butterfly::RampedValue<float> outputGain{1.f, 150};
     
 public:
     MIN_DESCRIPTION     { "Display and edit stacked frames." };
@@ -97,8 +96,7 @@ public:
     };
          
 
-    stacked_tables_tilde(const atoms& args = {}) : ui_operator::ui_operator {this, args}, multiFrameOsc{sampleRate, internalTablesize, oscFreq, maxFrames} {
-//        multiFrameOsc = {sampleRate, internalTablesize, oscFreq, maxFrames};
+    stacked_tables_tilde(const atoms& args = {}) : ui_operator::ui_operator {this, args}, multiFrameOsc{sampleRate, internalTablesize, static_cast<float>(oscillatorFreq.get()), maxFrames} {
         nIntervalls = calculateSplitFreqs(splitFreqs);
     }
     
@@ -137,6 +135,7 @@ public:
                 cout << "Max frame count reached." << endl;
                 message_out.send("Max frame count reached");    //Das dem Nutzer prompten
             }
+            notifyStackedTablesStatus();
             redraw();
             buf.dirty();
             buf.~buffer_lock();
@@ -184,6 +183,7 @@ public:
             } else {
                 multiFrameOsc.calculateIds();
             }
+            notifyStackedTablesStatus();
             redraw();
             return {};
         }
@@ -191,7 +191,8 @@ public:
     
     message<> clear_all {
         this, "clear_all", MIN_FUNCTION {
-            multiFrameOsc = {sampleRate, internalTablesize, oscFreq, maxFrames};
+            multiFrameOsc = {sampleRate, internalTablesize, static_cast<float>(oscillatorFreq.get()), maxFrames};
+            notifyStackedTablesStatus();
             redraw();
             return{};
         }
@@ -268,6 +269,16 @@ public:
             return{};
         }
     };
+    
+    void notifyStackedTablesStatus() {
+        if (multiFrameOsc.stackedFrames.frames.size() == 0) {
+            message_out.send("stackedTablesState", 0);
+        } else if (multiFrameOsc.stackedFrames.frames.size() == 1) {
+            message_out.send("stackedTablesState", 1);
+        } else if (multiFrameOsc.stackedFrames.frames.size() > 1) {
+            message_out.send("stackedTablesState", 2);
+        }
+    }
     
     ///-----GRAPHICS-----
     message<> paint {
