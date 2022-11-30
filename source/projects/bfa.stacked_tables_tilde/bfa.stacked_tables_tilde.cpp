@@ -65,7 +65,9 @@ public:
 
     attribute<color> background_color {this, "Background Color", color::predefined::gray, title {"Background Color"}};
     attribute<color> frame_color {this, "Frame Color", color::predefined::black};
+    attribute<color> selection_color {this, "Selection Color", {.8f, .8f, .8f, .8f}};
     attribute<color> morphed_frame_color {this, "Morphed Frame Color", {1.f, 1.f, 1.f, 1.f}};
+    attribute<bool> use_fat_lines_for_selection {this, "Draw selected waveforms fat", false};
     
     attribute<int, threadsafe::no, limit::clamp> m_channel {
         this, "Channel", 1,
@@ -304,12 +306,19 @@ public:
     void drawStackedFrames(int f, target t) {
         yOffset = (spacing * static_cast<float>(f)) + (spacing / 2.f) + (margin / 2.f);
         float stroke_width = 1.f;
-        if (multiFrameOsc.stackedFrames.frames[f].isSelected){stroke_width = 1.5f;};
+        //if (multiFrameOsc.stackedFrames.frames[f].isSelected){stroke_width = 1.5f;};
         float origin_x = margin / 2.f;
         float origin_y = (multiFrameOsc.stackedFrames.frames[f].samples[0] * yScaling * -1.f) + yOffset;
         float position = 0.f;
         float width = t.width() - margin;
-        float frac = static_cast<float>(internalTablesize) / width;
+        float frac     = static_cast<float>(internalTablesize) / width;
+        if (multiFrameOsc.stackedFrames.frames[f].isSelected) { 
+             if (use_fat_lines_for_selection) {
+                  stroke_width = 1.5f;
+             } else {
+                  rect<fill> r{t, color {selection_color}, origin {margin / 2., yOffset-yScaling}, size {width, 2 * yScaling}};
+             }
+        }
         lib::interpolator::linear<> linear_interpolation;
         for (int i = 0; i < width; i++) {
             int lower_index = floor(position);
