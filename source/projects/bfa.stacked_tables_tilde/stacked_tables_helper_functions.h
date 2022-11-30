@@ -118,7 +118,7 @@ public:
         int selectedFrameIdx = getSelectedFrameIdx();
         if (frames.size() < selectedFrameIdx) {return false;}
         frames.erase(frames.begin() + selectedFrameIdx);
-        if (selectedFrameIdx >= frames.size()) {
+        if (selectedFrameIdx >= frames.size() && frames.size() != 0) {
             frames.back().isSelected = true;
         } else if (selectedFrameIdx < frames.size()) {
             frames[selectedFrameIdx].isSelected = true;
