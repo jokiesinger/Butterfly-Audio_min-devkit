@@ -13,6 +13,7 @@
 #include "min_event_wrapper.h"
 #include "min_painter.h"
 
+#include <chrono>
 
 using namespace c74::min;
 using namespace c74::min::ui;
@@ -293,6 +294,7 @@ public:
 	Point mouseDownPoint, currentMousePoint;
 	MouseEvent::Button button{};
 	bool dragging{ false };
+	std::chrono::time_point<std::chrono::system_clock> clickTime;
 
 	// transform related
 	Rect dataRange;						// size of the draw target, will be updated on first draw.
@@ -575,6 +577,11 @@ void table_preprocessing::mouseupImpl(const MouseEvent& e) {
 		}
 	}
 	dragging = false;
+	const auto now = std::chrono::system_clock::now();
+	if (now - clickTime < std::chrono::milliseconds(300)) {
+		resetTransform();
+	}
+	clickTime = now;
 	redraw();
 }
 
