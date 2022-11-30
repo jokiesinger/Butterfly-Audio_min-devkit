@@ -32,6 +32,11 @@
 
 	<methodlist>
 
+		<method name='generate_frame'>
+			<digest></digest>
+			<description></description>
+		</method>
+
 		<method name='setMode'>
 			<digest>Set frame selection mode (custom, period)</digest>
 			<description>Set frame selection mode (custom, period). </description>
@@ -43,11 +48,6 @@
 		</method>
 
 		<method name='mousedrag'>
-			<digest></digest>
-			<description></description>
-		</method>
-
-		<method name='generate_frame'>
 			<digest></digest>
 			<description></description>
 		</method>

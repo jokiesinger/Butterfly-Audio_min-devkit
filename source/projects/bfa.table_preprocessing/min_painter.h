@@ -4,8 +4,8 @@
 namespace Butterfly {
 
 // Color conversion helpers
-c74::min::ui::color to(const Color& c) { return { c.r, c.g, c.b, c.a }; }
-Color to(const c74::min::ui::color& c) { return { c.red(), c.green(), c.blue(), c.alpha() }; }
+inline c74::min::ui::color to(const Color& c) { return { c.r, c.g, c.b, c.a }; }
+inline Color to(const c74::min::ui::color& c) { return { c.red(), c.green(), c.blue(), c.alpha() }; }
 
 
 class MaxPainter : public Painter
@@ -68,6 +68,16 @@ public:
 
 	void translate(double x, double y) override {}
 
+	void setDashPattern(const std::vector<double>& onOffPattern) override {
+		c74::max::t_jgraphics* g = t;
+		double a[] = { 4, 4 };
+		jgraphics_set_dash(g, a, 2, 0);
+	}
+
+	void setSolid() override {
+		c74::max::t_jgraphics* g = t;
+		jgraphics_set_dash(g, 0, 0, 0);
+	}
 
 	c74::min::ui::target& t;
 	Color fill{};

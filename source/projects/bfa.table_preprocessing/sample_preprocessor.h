@@ -5,25 +5,34 @@
 //  Created by Jonas Kieser on 07.10.22.
 //
 
-#include "waveform_processing.h"
+#pragma once
+
+#include <chrono>
+#include "min_painter.h"
+#include "min_event_wrapper.h"
+#include "graphics_transform.h"
+#include "wavetable_oscillator.h"
 
 
-struct SamplePreprocessor
+namespace Butterfly {
+
+// Callback for redirecting calls to the "parent" class 
+struct Callback
 {
-	std::vector<float> inputSamples;
-	std::vector<double> zeroCrossings;
+	virtual void doRedraw() = 0;
+	virtual void doNotifyCanExportStatus() = 0;
+};
 
-	void setSampleData(const std::vector<float>& data) {
-		inputSamples = data;
-		Butterfly::peakNormalize(inputSamples.begin(), inputSamples.end());
-		analyzeZeroCrossings();
-	}
+struct DrawAttributes
+{
+	Color waveformColor;
+	Color zeroCrossingsColor;
+	Color overlayColor;
+	Color draggingRectColor;
+	double strokeWidth;
+};
 
-	void analyzeZeroCrossings() {
-		zeroCrossings = Butterfly::getCrossings<std::vector<float>::iterator>(inputSamples.begin(), inputSamples.end());
-	}
-
-	/*
+/*
      Klasse könnte input Samples halten, ZeroCrossing Analysen und Pitch Detection durchführen
      Nachricht: "Analysing Input Samples" für die Dauer der Pitch Detection (graphic ausgegraut und nicht klickbar)
      bool für isPeriodic -> Feedback an Nutzer, wenn nicht (period Tab ausgegraut, nicht klickbar)
@@ -40,4 +49,99 @@ struct SamplePreprocessor
      
      Klasse handelt auch die Interpolation in den outputBuffer
      */
+struct SamplePreprocessor
+{
+public:
+	using Wavetable = Wavetable<float>;
+	using Osc = WavetableOscillator<Wavetable>;
+
+
+	enum class Mode {
+		free,
+		zeros,
+		period
+	};
+
+	SamplePreprocessor(Callback& callback) : callback(callback) {}
+
+	void setup(float sampleRate);
+	void setModeImpl(Mode newMode);
+	void setSampleData(const std::vector<float>& data);
+
+	void draw(MaxPainter& painter, const DrawAttributes& drawAttributes);
+
+	void mousedownImpl(const MouseEvent& e);
+	void mousedragImpl(const MouseEvent& e);
+	void mouseupImpl(const MouseEvent& e);
+	void mousewheelImpl(const MouseEvent& e);
+
+	bool canExport() const;
+	std::optional<std::vector<double>> exportFrame(int targetTablesize);
+
+private:
+
+	void inputSamplesChanged();
+
+	// Drawing
+	void redraw() { callback.doRedraw(); }
+	void drawSamples(MaxPainter& painter);
+	void drawDraggingRect(MaxPainter& painter);
+	void drawZeroCrossings(MaxPainter& painter);
+	void drawOverlayRects(MaxPainter& painter);
+	void targetResized(double width, double height); // Called when the target has been resized through any means
+	void resetTransform();
+	void constrainViewTransform();
+
+	// Selection/Export
+	void updateFreeSelection(const Point& mouseDownPoint, const Point& currentMousePoint);
+	void updateZerosSelection(const Point& mouseDownPoint, const Point& currentMousePoint);
+	std::pair<int, int> getCurrentExportRange() const;
+	void notifyCanExportStatus() { callback.doNotifyCanExportStatus(); }
+
+	// Zero crossings
+	void analyzeZeroCrossings();
+	double nearestZeroCrossing(double sampleIdx) const;
+
+	// Getters for testing
+	Mode getMode() const { return mode; }
+	bool isDragging() const { return dragging; }
+	double getSampleRate() const { return sampleRate; }
+	Rect getDataRange() const { return dataRange; }
+	std::pair<double, double> getFreeSelection() const { return freeSelection; }
+
+
+	// Data
+	Callback& callback;
+
+	std::vector<float> inputSamples;
+	std::vector<double> zeroCrossings;
+
+	double waveformYScaling = 0.9;
+	double zoomSpeed = 1.1;
+	double fastZoomSpeed = 1.8;
+
+	float margin{ 10.f }; //Könnte auch als Attribut
+	float sampleRate{ 48000.f };
+	Mode mode{ Mode::free };
+
+	// std::optional<PitchInfo> pitchInfoOptional;
+	// PitchInfo pitchInfo;
+	// float tf0, deviationInSmps{10.f};
+
+
+	// mouse event related
+	Point mouseDownPoint, currentMousePoint;
+	MouseEvent::Button button{};
+	bool dragging{ false };
+	std::chrono::time_point<std::chrono::system_clock> clickTime;
+
+	// transform related
+	Rect dataRange;						 // size of the draw target, will be updated on first draw.
+	Point targetSize{ 100, 100 };		 // size of the draw target, will be updated on first draw.
+	Rect waveformView{ {}, targetSize }; // size of the draw target, will be updated on first draw.
+	Transform transform;
+	std::pair<double, double> freeSelection;
+	std::pair<double, double> zerosSelection;
 };
+
+}

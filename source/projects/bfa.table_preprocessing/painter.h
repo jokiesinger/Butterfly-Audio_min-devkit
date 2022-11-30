@@ -52,6 +52,10 @@ public:
 	void clip(const Rect& r) { clip(r.x, r.y, r.width, r.height); }
 
 
+	virtual void setDashPattern(const std::vector<double>& onOffPattern) = 0;
+	virtual void setSolid() = 0;
+
+
 	virtual void translate(double x, double y) = 0;
 	void translate(const Point& p) { translate(p.x, p.y); }
 };
