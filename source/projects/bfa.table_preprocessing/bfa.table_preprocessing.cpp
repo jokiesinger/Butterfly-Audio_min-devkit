@@ -10,41 +10,40 @@
 #include "sample_preprocessor.h"
 #include "wavetable_oscillator.h"
 #include "graphics_transform.h"
+#include "min_event_wrapper.h"
+#include "min_painter.h"
 
 
 using namespace c74::min;
 using namespace c74::min::ui;
+using namespace Butterfly;
 
 
-void fillRect(target& t, const Butterfly::Rect& r, const color& c) {
+
+
+void fillRect(target& t, const Rect& r, const color& c) {
 	rect<fill> rect{ t, color{ c }, position{ r.x, r.y }, size{ r.width, r.height } };
 }
 
-void drawRect(target& t, const Butterfly::Rect& r, const color& c, double strokeWidth = 1.0) {
+void drawRect(target& t, const Rect& r, const color& c, double strokeWidth = 1.0) {
 	rect<stroke> rect{ t, color{ c }, position{ r.x, r.y }, size{ r.width, r.height }, line_width{ strokeWidth } };
 }
 
-void drawLine(target& t, const Butterfly::Point& p1, const Butterfly::Point& p2, const color& c, double strokeWidth = 1.0) {
+void drawLine(target& t, const Point& p1, const Point& p2, const color& c, double strokeWidth = 1.0) {
 	line<stroke> line{ t, color{ c }, origin{ p1.x, p1.y }, destination{ p2.x, p2.y }, line_width{ strokeWidth } };
 }
 
-
-void drawPoint(target& t, const Butterfly::Point& p1, const color& c, double siz = 1.0) {
+void drawPoint(target& t, const Point& p1, const color& c, double siz = 1.0) {
 	ellipse<fill> line{ t, color{ c }, position{ p1.x - siz * .5, p1.y - siz * .5 }, size{ siz, siz } };
 }
 
-enum class Button {
-	Left,
-	Right,
-	Center
-};
 
 
 class table_preprocessing : public object<table_preprocessing>, public ui_operator<160, 80>
 {
 public:
-	using Wavetable = Butterfly::Wavetable<float>;
-	using Osc = Butterfly::WavetableOscillator<Wavetable>;
+	using Wavetable = Wavetable<float>;
+	using Osc = WavetableOscillator<Wavetable>;
 
 	enum class Mode {
 		free,
@@ -129,21 +128,16 @@ public:
 	message<> mousewheel{
 		this, "mousewheel", [this](const c74::min::atoms& args, const int inlet) -> c74::min::atoms {
 			event e{ args };
-			const double speed = e.is_command_key_down() ? fastZoomSpeed : zoomSpeed;
-
-			const auto d = e.wheel_delta_y() > 0 ? speed : 1 / speed;
-			if (d > 1. && transform.apply({ 0, 0, 1, 0 }).width > targetSize.x) return {};
-			transform.scaleAround(e.x(), e.y(), d, 1);
-			constrainViewTransform();
-			redraw();
+			mousewheelImpl(createMouseEvent(e, MouseEvent::Action::Wheel));
 			return {};
 		}
 	};
 
+
 	message<> mousedown{
 		this, "mousedown", [this](const c74::min::atoms& args, const int inlet) -> c74::min::atoms {
 			event e{ args };
-			mousedownImpl({ static_cast<double>(e.x()), static_cast<double>(e.y()) }, getButton(e));
+			mousedownImpl(createMouseEvent(e, MouseEvent::Action::Down));
 			return {};
 		}
 	};
@@ -151,7 +145,15 @@ public:
 	message<> mouseup{
 		this, "mouseup", [this](const c74::min::atoms& args, const int inlet) -> c74::min::atoms {
 			event e{ args };
-			mouseupImpl({ static_cast<double>(e.x()), static_cast<double>(e.y()) }, getButton(e));
+			mouseupImpl(createMouseEvent(e, MouseEvent::Action::Up));
+			return {};
+		}
+	};
+
+	message<> dblclick{
+		this, "dblclick", [this](const c74::min::atoms& args, const int inlet) -> c74::min::atoms {
+			event e{ args };
+			resetTransform();
 			return {};
 		}
 	};
@@ -159,7 +161,7 @@ public:
 	message<> mousedrag{
 		this, "mousedrag", [this](const c74::min::atoms& args, const int inlet) -> c74::min::atoms {
 			event e{ args };
-			mousedragImpl({ static_cast<double>(e.x()), static_cast<double>(e.y()) }, getButton(e));
+			mousedragImpl(createMouseEvent(e, MouseEvent::Action::Drag));
 			return {};
 		}
 	};
@@ -181,14 +183,25 @@ public:
 			}
 
 			rect<fill> rect{ t, color{ backgroundColor } };
+			MaxPainter painter{ t };
 
 			if (samplePreprocessor.inputSamples.size() > 0) {
-				drawOverlayRects(t);
+				painter.fillColor(to(overlayColor));
+				drawOverlayRects(painter);
+
 				if ((samplePreprocessor.zeroCrossings.size() > 0) && (mode == Mode::zeros)) {
-					drawZeroCrossings(t);
+					painter.strokeColor(to(zeroCrossingsColor));
+					painter.strokeWidth(strokeWidth);
+					drawZeroCrossings(painter);
 				}
-				drawSamples(t);
-				drawDraggingRect(t);
+
+				painter.strokeWidth(strokeWidth);
+				painter.strokeColor(to(waveformColor));
+				painter.fillColor(to(waveformColor));
+				drawSamples(painter);
+
+				painter.strokeColor(to(draggingRectColor));
+				drawDraggingRect(painter);
 			}
 
 			return {};
@@ -200,12 +213,13 @@ public:
 
 	void targetResized(double width, double height); // Called when the target has been resized through any means
 	void constrainViewTransform();
-	void drawSamples(target& t);
-	void drawDraggingRect(target& t);
-	void drawZeroCrossings(target& t);
-	void drawOverlayRects(target& t);
+	void drawSamples(MaxPainter& painter);
+	void drawDraggingRect(MaxPainter& painter);
+	void drawZeroCrossings(MaxPainter& painter);
+	void drawOverlayRects(MaxPainter& painter);
 
 	void inputSamplesChanged();
+	void resetTransform();
 	void sampleDroppedImpl();
 	void setSampleData(const std::vector<float>& data);
 	bool canExport() const;
@@ -213,24 +227,25 @@ public:
 	bool exportFrame();
 	void notifyCanExportStatus();
 
-	void updateFreeSelection(const Butterfly::Point& mouseDownPoint, const Butterfly::Point& currentMousePoint);
-	void updateZerosSelection(const Butterfly::Point& mouseDownPoint, const Butterfly::Point& currentMousePoint);
+	void updateFreeSelection(const Point& mouseDownPoint, const Point& currentMousePoint);
+	void updateZerosSelection(const Point& mouseDownPoint, const Point& currentMousePoint);
 
 
-	void mousedownImpl(const Butterfly::Point& point, Button button);
-	void mousedragImpl(const Butterfly::Point& point, Button button);
-	void mouseupImpl(const Butterfly::Point& point, Button button);
+	void mousedownImpl(const MouseEvent& e);
+	void mousedragImpl(const MouseEvent& e);
+	void mouseupImpl(const MouseEvent& e);
+	void mousewheelImpl(const MouseEvent& e);
 
 	// Helper functions
 	double nearestZeroCrossing(double sampleIdx) const;
-	Button getButton(const event& e) const;
+	MouseEvent::Button getButton(const event& e) const;
 
 
 	// Getters for testing
 	Mode getMode() const { return mode; }
 	bool isDragging() const { return dragging; }
 	double getSampleRate() const { return sampleRate; }
-	Butterfly::Rect getDataRange() const { return dataRange; }
+	Rect getDataRange() const { return dataRange; }
 	std::pair<double, double> getFreeSelection() const { return freeSelection; }
 
 	//    void analyse_period_zero_crossings()
@@ -240,11 +255,11 @@ public:
 
 	//void getPitchAndZeroCrossings() {
 	//    //Analyze zero-crossings
-	//    allZeroCrossings = Butterfly::getCrossings<std::vector<float>::iterator>(inputSamples.begin(), inputSamples.end());
+	//    allZeroCrossings = getCrossings<std::vector<float>::iterator>(inputSamples.begin(), inputSamples.end());
 	//    periodZeroCrossings.clear();
 	//
 	//    //Perform pitch detection
-	//    pitchInfoOptional = Butterfly::getPitch(inputSamples.begin(), inputSamples.end());
+	//    pitchInfoOptional = getPitch(inputSamples.begin(), inputSamples.end());
 	//    if (pitchInfoOptional) { pitchInfo = *pitchInfoOptional; }
 	//
 	//    //Period duration
@@ -269,21 +284,21 @@ public:
 	Mode mode{ Mode::free };
 
 	SamplePreprocessor samplePreprocessor;
-	// std::optional<Butterfly::PitchInfo> pitchInfoOptional;
-	// Butterfly::PitchInfo pitchInfo;
+	// std::optional<PitchInfo> pitchInfoOptional;
+	// PitchInfo pitchInfo;
 	// float tf0, deviationInSmps{10.f};
 
 
 	// mouse event related
-	Butterfly::Point mouseDownPoint, currentMousePoint;
-	Button button{};
+	Point mouseDownPoint, currentMousePoint;
+	MouseEvent::Button button{};
 	bool dragging{ false };
 
 	// transform related
-	Butterfly::Rect dataRange;						// size of the draw target, will be updated on first draw.
-	Butterfly::Point targetSize{ 100, 100 };		// size of the draw target, will be updated on first draw.
-	Butterfly::Rect waveformView{ {}, targetSize }; // size of the draw target, will be updated on first draw.
-	Butterfly::Transform transform;
+	Rect dataRange;						// size of the draw target, will be updated on first draw.
+	Point targetSize{ 100, 100 };		// size of the draw target, will be updated on first draw.
+	Rect waveformView{ {}, targetSize }; // size of the draw target, will be updated on first draw.
+	Transform transform;
 	std::pair<double, double> freeSelection;
 	std::pair<double, double> zerosSelection;
 };
@@ -301,14 +316,14 @@ void table_preprocessing::setModeImpl(Mode newMode) {
 }
 
 
-void table_preprocessing::updateFreeSelection(const Butterfly::Point& mouseDownPoint, const Butterfly::Point& currentMousePoint) {
+void table_preprocessing::updateFreeSelection(const Point& mouseDownPoint, const Point& currentMousePoint) {
 	const auto selectionValueRect = transform.from({ mouseDownPoint, currentMousePoint });
 	freeSelection.first = std::clamp(selectionValueRect.x, 0., samplePreprocessor.inputSamples.size() - 1.0);
 	freeSelection.second = std::clamp(selectionValueRect.x + selectionValueRect.width, 0., samplePreprocessor.inputSamples.size() - 1.0);
 	notifyCanExportStatus();
 }
 
-void table_preprocessing::updateZerosSelection(const Butterfly::Point& mouseDownPoint, const Butterfly::Point& currentMousePoint) {
+void table_preprocessing::updateZerosSelection(const Point& mouseDownPoint, const Point& currentMousePoint) {
 	double nearestCrossing1 = nearestZeroCrossing(transform.fromX(mouseDownPoint.x));
 	double nearestCrossing2 = nearestZeroCrossing(transform.fromX(currentMousePoint.x));
 	zerosSelection.first = std::clamp(nearestCrossing1, 0., samplePreprocessor.inputSamples.size() - 1.0);
@@ -366,7 +381,7 @@ void table_preprocessing::notifyCanExportStatus() {
 	}
 }
 
-void table_preprocessing::drawSamples(target& t) { //Das allgemeingültig schreiben und auch bei StackedFrames verwenden!
+void table_preprocessing::drawSamples(MaxPainter& painter) { //Das allgemeingültig schreiben und auch bei StackedFrames verwenden!
 	if (samplePreprocessor.inputSamples.empty()) return;
 
 	// get first/last visible sample
@@ -379,7 +394,7 @@ void table_preprocessing::drawSamples(target& t) { //Das allgemeingültig schrei
 		auto previous = point;
 		for (int i = first + 1; i < last; ++i) {
 			const auto point = transform.apply({ static_cast<double>(i), -samplePreprocessor.inputSamples[i] * waveformYScaling });
-			drawLine(t, previous, point, waveformColor, strokeWidth);
+			painter.line(previous, point);
 			previous = point;
 		}
 	} else if (step < 10) {
@@ -388,7 +403,7 @@ void table_preprocessing::drawSamples(target& t) { //Das allgemeingültig schrei
 		for (int i = first + step; i < last; i += step) {
 			auto sample = *std::max_element(samplePreprocessor.inputSamples.begin() + i - step, samplePreprocessor.inputSamples.begin() + i, [](auto a, auto b) { return a * a < b * b; });
 			const auto point = transform.apply({ static_cast<double>(i), -sample * waveformYScaling });
-			drawLine(t, previous, point, waveformColor, strokeWidth);
+			painter.line(previous, point);
 			previous = point;
 		}
 	} else {
@@ -396,38 +411,38 @@ void table_preprocessing::drawSamples(target& t) { //Das allgemeingültig schrei
 			auto [min, max] = std::minmax_element(samplePreprocessor.inputSamples.begin() + i - step, samplePreprocessor.inputSamples.begin() + i);
 			const auto p1 = transform.apply({ static_cast<double>(i), -*min * waveformYScaling });
 			const auto p2 = transform.apply({ static_cast<double>(i), -*max * waveformYScaling });
-			drawLine(t, p1, p2, waveformColor, strokeWidth);
+			painter.line(p1, p2);
 		}
 	}
 
 	if (transform.apply({ 0, 0, 1, 0 }).width > targetSize.x / 20.) {
 		for (int i = first; i < last; ++i) {
 			const auto point = transform.apply({ static_cast<double>(i), -samplePreprocessor.inputSamples[i] * waveformYScaling });
-			drawPoint(t, point, waveformColor, 5.0);
+			painter.point(point, 5.0);
 		}
 	}
 }
 
-void table_preprocessing::drawDraggingRect(target& t) {
-	if (dragging && button == Button::Right) {
+void table_preprocessing::drawDraggingRect(MaxPainter& painter) {
+	if (dragging && button == MouseEvent::Button::Right) {
 
 		// enable dashed stroke style
-		c74::max::t_jgraphics* g = t;
+		c74::max::t_jgraphics* g = painter.t;
 		double a[] = { 4, 4 };
 		jgraphics_set_dash(g, a, 2, 0);
 
-		Butterfly::Rect rect = { currentMousePoint, mouseDownPoint };
+		Rect rect = { currentMousePoint, mouseDownPoint };
 		rect.y = margin;
-		rect.height = t.height() - 2 * margin;
+		rect.height = painter.getHeight() - 2 * margin;
 		if (rect.width > 0) {
-			drawRect(t, rect, draggingRectColor, 1.0);
+			painter.rectOutline(rect, 1.0);
 		}
 		// disable dashed stroke style
 		jgraphics_set_dash(g, 0, 0, 0);
 	}
 }
 
-void table_preprocessing::drawZeroCrossings(target& t) {
+void table_preprocessing::drawZeroCrossings(MaxPainter& painter) {
 	// get first/last visible sample
 	const int first = std::max(0., transform.fromX(0) - 1.);
 	const int last = std::min<double>(samplePreprocessor.inputSamples.size(), std::ceil(transform.fromX(targetSize.x) + 1.));
@@ -439,35 +454,39 @@ void table_preprocessing::drawZeroCrossings(target& t) {
 		if (value > last) break;
 		const auto p1 = transform.apply({ value, 1. });
 		const auto p2 = transform.apply({ value, -1. });
-		drawLine(t, p1, p2, zeroCrossingsColor, strokeWidth);
+		painter.line(p1, p2);
 	}
 }
 
-void table_preprocessing::drawOverlayRects(target& t) {
+void table_preprocessing::drawOverlayRects(MaxPainter& painter) {
 	if (mode == Mode::free) {
 		if (freeSelection.first == freeSelection.second)
 			return;
 		const auto r = transform.apply({ { freeSelection.first, 1 }, { freeSelection.second, -1 } });
-		fillRect(t, r, overlayColor);
+		painter.rect(r);
 	} else if (mode == Mode::zeros) {
 		if (zerosSelection.first == zerosSelection.second)
 			return;
 		const auto r = transform.apply({ { zerosSelection.first, 1 }, { zerosSelection.second, -1 } });
-		fillRect(t, r, overlayColor);
+		painter.rect(r);
 	}
 }
 
 void table_preprocessing::inputSamplesChanged() {
-	dataRange = Butterfly::Rect::fromBounds(0, samplePreprocessor.inputSamples.size(), -1, 1);
-	transform = Butterfly::Transform::MapRect(dataRange, waveformView);
+	resetTransform();
+}
+
+void table_preprocessing::resetTransform() {
+	dataRange = Rect::fromBounds(0, samplePreprocessor.inputSamples.size(), -1, 1);
+	transform = Transform::MapRect(dataRange, waveformView);
 }
 
 void table_preprocessing::targetResized(double width, double height) {
 	const auto currentViewRect = transform.from(waveformView);
 	targetSize = { width, height };
 	waveformView.resize(width - 2 * margin, height - 2 * margin).moveTo({ margin, margin });
-	transform = Butterfly::Transform::MapRect(currentViewRect, waveformView);
-	//transform = Butterfly::Transform::MapRect(dataRange, waveformView);
+	transform = Transform::MapRect(currentViewRect, waveformView);
+	//transform = Transform::MapRect(dataRange, waveformView);
 }
 
 void table_preprocessing::constrainViewTransform() {
@@ -503,26 +522,27 @@ void table_preprocessing::setSampleData(const std::vector<float>& data) {
 }
 
 
-void table_preprocessing::mousedownImpl(const Butterfly::Point& point, Button button) {
+void table_preprocessing::mousedownImpl(const MouseEvent& e) {
 	if (samplePreprocessor.inputSamples.empty()) return;
-	mouseDownPoint = point;
+	mouseDownPoint = { e.x, e.y };
 	currentMousePoint = mouseDownPoint;
 	dragging = true;
-	this->button = button;
+	this->button = e.button;
 	redraw();
 }
 
-void table_preprocessing::mousedragImpl(const Butterfly::Point& point, Button button) {
+void table_preprocessing::mousedragImpl(const MouseEvent& e) {
 	if (samplePreprocessor.inputSamples.empty())
 		return;
+	Point point{ e.x, e.y };
 
-	if (button == Button::Left) {
+	if (e.button == MouseEvent::Button::Left) {
 		if (mode == Mode::free) {
 			updateFreeSelection(mouseDownPoint, point);
 		} else if (mode == Mode::zeros) {
 			updateZerosSelection(mouseDownPoint, point);
 		}
-	} else if (button == Button::Center) {
+	} else if (e.button == MouseEvent::Button::Middle) {
 		auto p = point - currentMousePoint;
 		transform.preTranslate(p);
 		constrainViewTransform();
@@ -531,24 +551,25 @@ void table_preprocessing::mousedragImpl(const Butterfly::Point& point, Button bu
 	redraw();
 }
 
-void table_preprocessing::mouseupImpl(const Butterfly::Point& point, Button button) {
+void table_preprocessing::mouseupImpl(const MouseEvent& e) {
 	if (samplePreprocessor.inputSamples.empty()) return;
+	Point point{ e.x, e.y };
 
 	currentMousePoint = point;
-	if (button == Button::Left) {
+	if (e.button == MouseEvent::Button::Left) {
 		if (mode == Mode::free) {
 			updateFreeSelection(mouseDownPoint, point);
 		} else if (mode == Mode::zeros) {
 			updateZerosSelection(mouseDownPoint, point);
 		}
-	} else if (button == Button::Right) {
+	} else if (e.button == MouseEvent::Button::Right) {
 		if (dragging) {
-			Butterfly::Rect r{ mouseDownPoint, point };
+			Rect r{ mouseDownPoint, point };
 			r.y = waveformView.y;
 			r.height = waveformView.height;
 			if (r.width > 0) {
 				auto r2 = transform.from(r);
-				transform = Butterfly::Transform::MapRect(r2, waveformView);
+				transform = Transform::MapRect(r2, waveformView);
 				constrainViewTransform();
 			}
 		}
@@ -557,19 +578,29 @@ void table_preprocessing::mouseupImpl(const Butterfly::Point& point, Button butt
 	redraw();
 }
 
+void table_preprocessing::mousewheelImpl(const MouseEvent& e) {
+	const double speed = e.isControlDown() ? fastZoomSpeed : zoomSpeed;
+	const auto delta = e.deltaY > 0 ? speed : 1 / speed;
+	if (delta > 1. && transform.apply({ 0, 0, 1, 0 }).width > targetSize.x) return;
+	transform.scaleAround(e.x, e.y, delta, 1);
+	constrainViewTransform();
+	redraw();
+}
+
 double table_preprocessing::nearestZeroCrossing(double sampleIdx) const {
 	if (samplePreprocessor.zeroCrossings.empty()) { return 0.; }
 	return *std::min_element(samplePreprocessor.zeroCrossings.begin(), samplePreprocessor.zeroCrossings.end(), [sampleIdx](auto a, auto b) { return std::abs(a - sampleIdx) < std::abs(b - sampleIdx); });
 }
 
-Button table_preprocessing::getButton(const event& e) const {
+MouseEvent::Button table_preprocessing::getButton(const event& e) const {
 	if (e.m_modifiers & c74::max::eLeftButton)
-		return Button::Left;
+		return MouseEvent::Button::Left;
 	else if (e.m_modifiers & c74::max::eRightButton)
-		return Button::Right;
+		return MouseEvent::Button::Right;
 	else if (e.m_modifiers & c74::max::eMiddleButton)
-		return Button::Center;
-	return Button::Left;
+		return MouseEvent::Button::Middle;
+	return MouseEvent::Button::Left;
 }
+
 
 MIN_EXTERNAL(table_preprocessing);
