@@ -177,7 +177,19 @@ public:
             return{};
         }
     };
-    
+    /*
+    message<> normalize_frame {
+        this, "normalize_frame", MIN_FUNCTION {
+            if (!multiFrameOsc.stackedFrames.normalizeFrame()) {
+                cout << "Can't normalize selected frame." << endl;
+            } else {
+                multiFrameOsc.updateMorphingSamples();
+            }
+            redraw();
+            return{};
+        }
+    };
+    */
     message<> delete_selected_frame {
         this, "delete_selected_frame", MIN_FUNCTION {
             if (!multiFrameOsc.stackedFrames.removeSelectedFrame()) {

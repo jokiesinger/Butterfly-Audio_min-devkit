@@ -8,6 +8,7 @@
 //#include "../../../submodules/Butterfly_Audio_Library/src/synth/src/wavetable_oscillator.h"
 #include "wavetable_oscillator.h"
 #include "ramped_value.h"
+#include "waveform_processing.h"
 #include <cmath>
 
 struct Frame
@@ -15,19 +16,33 @@ struct Frame
     using Wavetable = Butterfly::Wavetable<float>;
     bool isEmpty{true};
     bool isSelected{false};
+    //typename std::iterator_traits<It>::value_type normalizationTarget = 0.891251;   //-1dB (could be Max attribute)
+    const double normalizationTarget = 0.891251;
 //    unsigned int position{};        //zero based counting - necessary?
     
-    std::vector<float> samples;     //rough data -> braucht es nicht zwingend
+    std::vector<float> samples;     //raw data -> braucht es nicht zwingend
     std::vector<Wavetable> multitable;    //antialiased data
     
     void flipPhase() {
-        for (auto &wavetable : multitable) {
+        for (auto &wavetable : multitable) {    //antialiased multitable (audio)
             wavetable *= -1.f;
         }
-        for (float &sample : samples) {
+        for (float &sample : samples) {         //raw data (visualisation)
             sample *= -1.f;
         }
     }
+    /*
+    void normalize() {
+        //Get peak out of raw data (same normalization value for all tables in multitable)
+        const auto inv = normalizationTarget / Butterfly::peak(samples.begin(), samples.end());
+        for (auto &wavetable : multitable) {
+            wavetable *= inv;
+        }
+        for (float &sample : samples) {
+            sample *= inv;
+        }
+    }
+     */
 };
 
 //Frame factory function
@@ -111,7 +126,17 @@ public:
             }
         }
     }
-    
+    /*
+    bool normalizeFrame() {
+        if (frames.empty()) {return false;}
+        for (auto &frame : frames) {
+            if (frame.isSelected) {
+                frame.normalize();
+                return true;
+            }
+        }
+    }
+    */
     bool removeSelectedFrame()
     {
         if (frames.empty()) {return false;}
