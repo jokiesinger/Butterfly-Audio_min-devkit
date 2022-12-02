@@ -177,7 +177,7 @@ public:
             return{};
         }
     };
-    /*
+    
     message<> normalize_frame {
         this, "normalize_frame", MIN_FUNCTION {
             if (!multiFrameOsc.stackedFrames.normalizeFrame()) {
@@ -189,7 +189,7 @@ public:
             return{};
         }
     };
-    */
+    
     message<> delete_selected_frame {
         this, "delete_selected_frame", MIN_FUNCTION {
             if (!multiFrameOsc.stackedFrames.removeSelectedFrame()) {

@@ -5,7 +5,6 @@
 //  Created by Jonas Kieser on 07.10.22.
 //
 
-//#include "../../../submodules/Butterfly_Audio_Library/src/synth/src/wavetable_oscillator.h"
 #include "wavetable_oscillator.h"
 #include "ramped_value.h"
 #include "waveform_processing.h"
@@ -17,7 +16,7 @@ struct Frame
     bool isEmpty{true};
     bool isSelected{false};
     //typename std::iterator_traits<It>::value_type normalizationTarget = 0.891251;   //-1dB (could be Max attribute)
-    const double normalizationTarget = 0.891251;
+    double normalizationTarget = 0.891251;
 //    unsigned int position{};        //zero based counting - necessary?
     
     std::vector<float> samples;     //raw data -> braucht es nicht zwingend
@@ -31,7 +30,7 @@ struct Frame
             sample *= -1.f;
         }
     }
-    /*
+    
     void normalize() {
         //Get peak out of raw data (same normalization value for all tables in multitable)
         const auto inv = normalizationTarget / Butterfly::peak(samples.begin(), samples.end());
@@ -42,7 +41,6 @@ struct Frame
             sample *= inv;
         }
     }
-     */
 };
 
 //Frame factory function
@@ -126,7 +124,7 @@ public:
             }
         }
     }
-    /*
+    
     bool normalizeFrame() {
         if (frames.empty()) {return false;}
         for (auto &frame : frames) {
@@ -136,7 +134,7 @@ public:
             }
         }
     }
-    */
+    
     bool removeSelectedFrame()
     {
         if (frames.empty()) {return false;}
@@ -217,6 +215,7 @@ public:
     float secondFrameWeighting{0.f};
     
     Butterfly::RampedValue<float> morphingParam{1.f, 150};
+    //Butterfly::RampedValue<float> pos{1.f, 150};
     
     //Constructor inits Osc with zero tables to prevent assert
 //    MultiFrameOsc() = default;
@@ -250,12 +249,13 @@ public:
         return true;
     }
     
-    void setPos(float _pos) {
+    void setPos(float _pos) {   //makes no sense with public pos
+        //pos.set(_pos);
         pos = _pos;
         calculateIds();
     }
     
-    void calculateIds() {
+    void calculateIds() {       //We would have to call this per sample if morphing parameter is changing
         if (stackedFrames.frames.size() < 1) {
             isVisible = false;  //setVisibility redundant?
             firstFrameIdx = 0;
@@ -271,6 +271,8 @@ public:
             secondFrameWeighting = 0.f;
             initOscOneFrame();
         } else {
+            //---Bis hier hin könnte man alles auslagern und nur bei Frame changes aufrufen
+            //---scaledPos wäre dann ein rampedValue
             float scaledPos = pos * static_cast<float>(stackedFrames.frames.size() - 1); //Scale position to frame count
             struct Idcs {
                 int firstIdx{0}, secondIdx{1};
@@ -324,6 +326,7 @@ public:
     
     //process() -> handelt morphingParam und Osc update
     constexpr float operator++() {
+        //calculateIds(++pos);
         Osc.setParam(++morphingParam);
         return ++Osc;;
     }
