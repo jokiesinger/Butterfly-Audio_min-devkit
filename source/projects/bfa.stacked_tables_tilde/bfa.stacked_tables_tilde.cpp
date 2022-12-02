@@ -105,7 +105,8 @@ public:
     message<> dspsetup {
         this, "dspsetup", MIN_FUNCTION {
             sampleRate = static_cast<float>(args[0]);
-            multiFrameOsc.Osc.setSampleRate(sampleRate);
+            //multiFrameOsc.Osc.setSampleRate(sampleRate);
+            multiFrameOsc.setSampleRate(sampleRate);
             cout << "dspsetup happend" << endl;
             return {};
         }
@@ -131,7 +132,7 @@ public:
                 data.push_back(buf.lookup(i, chan));
             }
             
-            if (multiFrameOsc.addFrame(data, sampleRate, splitFreqs, fftCalculator)){
+            if (multiFrameOsc.addFrame(data, sampleRate, splitFreqs, fftCalculator, oscillatorFreq)){
                 cout << "Frame succesfully added.\n";
             } else {
                 cout << "Max frame count reached." << endl;
@@ -147,7 +148,7 @@ public:
     
     message<> flip_phase {
         this, "flip_phase", MIN_FUNCTION {
-            multiFrameOsc.stackedFrames.flipPhase();
+            multiFrameOsc.stackedFrames.flipPhase();        //direkt auf multiFrameOsc anwenden, der handelt stackedFrames und sich selbst
             multiFrameOsc.updateMorphingSamples();
             redraw();
             return{};
@@ -236,7 +237,7 @@ public:
     message<> set_freq {
         this, "set_freq", MIN_FUNCTION {
             oscillatorFreq = std::clamp(static_cast<double>(args[0]), 1., static_cast<double>(sampleRate) / 2.);
-            multiFrameOsc.Osc.setFrequency(oscillatorFreq.get());
+            multiFrameOsc.setFrequency(oscillatorFreq);
             return{};
         }
     };
