@@ -168,7 +168,7 @@ public:
             for (int i = 0; i < exportTablesize; i++) {
                 interpolatedTable.push_back(interpolationOscillator++);
             }
-            stackedTable.insert(stackedTable.end(), interpolatedTable.begin(), interpolatedTable.end());
+            stackedTable.insert(stackedTable.begin(), interpolatedTable.begin(), interpolatedTable.end());
         }
         return true;
     }
