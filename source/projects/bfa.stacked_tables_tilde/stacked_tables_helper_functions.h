@@ -62,7 +62,7 @@ Frame createFrame(const std::vector<float>& data, float sampleRate, const std::v
     //frame.Osc.setSampleRate(sampleRate);
     //frame.Osc.setFrequency(frequency);
     //frame.Osc.setTable(&frame.multitable);
-    return frame;
+    return std::move(frame);
 }
 
 class StackedFrames
@@ -84,7 +84,9 @@ public:
     unsigned int maxFrames{0};
     std::vector<Frame> frames;
     
-    StackedFrames() = default;
+    StackedFrames() {
+		frames.reserve(16);
+    }
     
     template<int internalTablesize>
     bool addFrame(const std::vector<float> &data, float sampleRate, const std::vector<float> &splitFreqs, const Butterfly::FFTCalculator<float, internalTablesize> &fftCalculator, float frequency)
@@ -92,7 +94,8 @@ public:
         if (frames.size() >= maxFrames) {
             return false;
         }
-        frames.push_back(createFrame(data, sampleRate, splitFreqs, fftCalculator, frequency));
+        frames.push_back(std::move(createFrame(data, sampleRate, splitFreqs, fftCalculator, frequency)));
+	   frames.back().Osc = {&frames.back().multitable, frames.back().Osc.getSampleRate(), frames.back().Osc.getFrequency()};
         int lastFrameIdx = frames.size() - 1;
         //frames[lastFrameIdx].Osc = {&frames[lastFrameIdx].multitable, sampleRate, frequency};
         selectFrame(lastFrameIdx);
