@@ -24,7 +24,7 @@ struct Frame
     std::vector<Wavetable> multitable;    //antialiased data
     
     TableOsc Osc;
-    Butterfly::RampedValue<float> gain{0.f, 150};
+    Butterfly::RampedValue<float> gain{0.f, 500};
     
     void flipPhase() {
         for (auto &wavetable : multitable) {    //antialiased multitable (audio)
@@ -255,12 +255,19 @@ public:
             stackedFrames.frames[firstFrameIdx].gain = firstFrameWeighting;
             morphingSamples = stackedFrames.frames[0].samples;
         } else {
-            for (auto &frame : stackedFrames.frames) {
-                frame.gain.set(0.f);
-            }
+
             float scaledPos = pos * static_cast<float>(stackedFrames.frames.size() - 1); //Scale position to frame count
             firstFrameIdx = std::min(static_cast<size_t>(scaledPos), stackedFrames.frames.size() - 2);
             firstFrameWeighting = 1.f - (scaledPos - firstFrameIdx);
+            /*
+            std::cout << firstFrameIdx << std::endl;
+            std::cout << firstFrameIdx + 1 << std::endl;
+            std::cout << firstFrameWeighting << std::endl;
+            std::cout << 1.f - firstFrameWeighting << "\n" << std::endl;
+            */
+            for (auto &frame : stackedFrames.frames) {
+                frame.gain.set(0.f);
+            }
             stackedFrames.frames[firstFrameIdx].gain.set(firstFrameWeighting);
             stackedFrames.frames[firstFrameIdx + 1].gain.set(1.f - firstFrameWeighting);
             updateMorphingSamples();
