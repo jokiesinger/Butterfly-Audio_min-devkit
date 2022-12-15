@@ -204,8 +204,8 @@ public:
 			return false;
 		}
 		stackedFrames.addFrame(data, sampleRate, splitFreqs, fftCalculator);
-		setMorphingParam(getMorphingParam());
 		numFramesChanged();
+		setMorphingParam(getMorphingParam());
 		return true;
 	}
 
@@ -228,8 +228,6 @@ public:
 		return stackedFrames.frames.size() > 1;
 	}
 
-
-	// process() -> handelt morphingParam und Osc update
 	constexpr float operator++() {
 		++morphingParam;
 		if (!morphingParam.isRamping() && !instructions.empty()) {
@@ -239,34 +237,25 @@ public:
 			morphingParam.setSteps(rampingStepsPerWavetable * std::abs(morphingParam() - instruction.normalizedMorphingParam)
 				* (currentFirstTable != currentSecondTable));
 			morphingParam.set(instruction.normalizedMorphingParam);
-			// if (instruction.type == InstructionType::Ramp) {
-			//}
-			// else {
-			//	// assert(morphingParam() == 1-);
-			//	if (instruction.pos == 0.) {
-			//		osc.setFirstTable(&stackedFrames.frames[instruction.firstTable].multitable);
-			//		currentFirstTable = instruction.firstTable;
-			//	}
-			//	else {
-			//		osc.setSecondTable(&stackedFrames.frames[instruction.firstTable].multitable);
-			//		currentFirstTable = instruction.firstTable - 1;
-			//	}
-			//	morphingParam.set(instruction.pos);
-			//}
 		}
 		osc.setParam(morphingParam());
 		return ++osc;
 	}
 
-	void updateMorphedSamples() {
+	void updateMorphedSamples(int firstTable) {
 		if (stackedFrames.frames.size() < 2) {
 			return;
 		}
-		const auto& firstFrame  = stackedFrames.frames[targetFirstTable];
-		const auto& secondFrame = stackedFrames.frames[targetFirstTable + 1];
+		const auto& firstFrame  = stackedFrames.frames[firstTable];
+		const auto& secondFrame = stackedFrames.frames[firstTable + 1];
 		for (int i = 0; i < morphingSamples.size(); i++) {
-			morphingSamples[i] = firstFrame.samples[i] * (1.f - targetFractional) + secondFrame.samples[i] * targetFractional;
+			morphingSamples[i]
+				= firstFrame.samples[i] * (1.f - targetFractionalMorphingParam) + secondFrame.samples[i] * targetFractionalMorphingParam;
 		}
+	}
+
+	void updateMorphedSamples() {
+		updateMorphedSamples(currentFirstTable);
 	}
 
 	void setRampSpeed(int rampingStepsPerWavetable) {
@@ -288,7 +277,6 @@ private:
 		assert(stackedFrames.frames.size() > index && "MultiOsc::setFirstTable(): index out of range");
 		osc.setFirstTable(&stackedFrames.frames[index].multitable);
 		currentFirstTable = index;
-		targetFirstTable  = currentFirstTable;
 	}
 
 	void setSecondTable(int index) {
@@ -309,19 +297,19 @@ private:
 
 	void numFramesChanged() {
 		const auto numFrames = stackedFrames.frames.size();
-		if (currentFirstTable < numFrames && currentSecondTable < numFrames)
-			return;
-		if (numFrames == 0) {
-			setNoTables();
+		if (currentFirstTable >= numFrames || currentSecondTable >= numFrames) {
+			if (numFrames == 0) {
+				setNoTables();
+			}
+			else if (numFrames == 1) {
+				setTables(0, 0);
+			}
+			else {
+				setTables(numFrames - 2, numFrames - 1);
+			}
 		}
-		else if (numFrames == 1) {
-			setTables(0, 0);
-		}
-		else {
-			setTables(numFrames - 2, numFrames - 1);
-		}
-		instructions.clear();
 		updateMorphedSamples();
+		instructions.clear();
 	}
 
 	void tablesRearranged() {
@@ -334,11 +322,11 @@ private:
 	void morphingParamChanged() {
 		if (stackedFrames.frames.size() < 2)
 			return;
-		float scaledPos  = normalizedMorphingParam * static_cast<float>(stackedFrames.frames.size() - 1);
-		targetFirstTable = std::min<int>(static_cast<int>(scaledPos), stackedFrames.frames.size() - 2);
-		targetFractional = scaledPos - targetFirstTable;
-		setWavetableMorphingPosition(targetFirstTable, targetFractional);
-		updateMorphedSamples();
+		float scaledPos               = normalizedMorphingParam * static_cast<float>(stackedFrames.frames.size() - 1);
+		auto  targetFirstTable        = std::min<int>(static_cast<int>(scaledPos), stackedFrames.frames.size() - 2);
+		targetFractionalMorphingParam = scaledPos - targetFirstTable;
+		setWavetableMorphingPosition(targetFirstTable, targetFractionalMorphingParam);
+		updateMorphedSamples(targetFirstTable);
 	}
 
 
@@ -352,7 +340,7 @@ private:
 		if (newFirstTable == currentFirstTable) {
 			instructions.clear();    // if in phase 1 or 3
 
-			// TODO: what to do in phase 2? continue phase 2 and then start new
+			// Done: TODO: what to do in phase 2? continue phase 2 and then start new
 			// if (rampingPhase == RampingPhase::RampBetweenNonconsecutiveTables) {
 			if (currentSecondTable != currentFirstTable + 1) {    // a.k.a second phase
 				// when we jump during the second phase (going-down version) we dont want to finish the
@@ -369,7 +357,7 @@ private:
 			}
 		}
 		else {
-			// TODO: what if we are in a phase? especially the second one?
+			// Done: TODO: what if we are in a phase? especially the second one?
 			// case first phase:  omit first phase
 			// case second phase: omit first phase
 			// case third phase:  cancel current ramp
@@ -420,8 +408,6 @@ private:
 
 	*/
 
-	int rampingStepsPerWavetable {15000};
-
 
 	struct RampingInstruction {
 		int    firstTable;
@@ -430,22 +416,18 @@ private:
 	};
 
 
-	int                             currentFirstTable {-1};
-	int                             currentSecondTable {-1};
-	double                          currentPos {};
-	double                          targetFractional {};
-	double                          targetFirstTable {};
+	int    currentFirstTable {-1};
+	int    currentSecondTable {-1};    // may not be (currentFirstTable + 1) !
+	double targetFractionalMorphingParam {};
+	float  normalizedMorphingParam {1.f};
+
+	int                             rampingStepsPerWavetable {15000};
 	std::vector<RampingInstruction> instructions;
-
-
-	Wavetable                       zeroTable;    // for init Osc with no frame
-	std::vector<Wavetable>          zeroWavetable;
-
-	float normalizedMorphingParam {1.f};
 
 	Butterfly::RampedValue<float> morphingParam {1.f, 150};
 
-	/// --------------------------------------------
+	Wavetable              zeroTable;    // for init osc with no frame
+	std::vector<Wavetable> zeroWavetable;
 };
 
 int calculateSplitFreqs(
