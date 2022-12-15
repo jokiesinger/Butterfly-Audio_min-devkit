@@ -5,7 +5,6 @@
 //  Created by Jonas Kieser on 07.10.22.
 //
 
-//#include "../../../submodules/Butterfly_Audio_Library/src/synth/src/wavetable_oscillator.h"
 #include "wavetable_oscillator.h"
 #include "ramped_value.h"
 #include <cmath>
@@ -171,58 +170,25 @@ class MultiFrameOsc {
 	using Wavetable = Butterfly::Wavetable<float>;
 	using TableOsc  = Butterfly::WavetableOscillator<Wavetable>;
 
-private:
-	void initOscNoFrame() {
-		osc.setParam(0.f);
-		osc.setTables(&zeroWavetable, &zeroWavetable);
-		// Set Idcs and Weightings to sth?
-	}
-	void initOscOneFrame() {
-		osc.setParam(0.f);
-		osc.setTables(&stackedFrames.frames[0].multitable, &stackedFrames.frames[0].multitable);
-		// Set Idcs and Weightings to sth?
-	}
-	void setVisibility() {
-		if (stackedFrames.frames.size() < 2) {
-			isVisible = false;
-		}
-		else {
-			isVisible = true;
-		}
-	}
 
 public:
 	StackedFrames                                   stackedFrames {};
 	Butterfly::MorpingWavetableOscillator<TableOsc> osc;
 
 	std::vector<float> morphingSamples;    // for graphics
-	bool               isVisible {false};
 
-	std::vector<float>     zeroData;    // for init Osc with no frame
-	Wavetable              zeroTable;
-	std::vector<Wavetable> zeroWavetable;
-
-	float        pos {1.f};
-	unsigned int firstFrameIdx {0};    // reference to frames.samples[i]
-	unsigned int secondFrameIdx {1};
-	float        firstFrameWeighting {1.f};
-	float        secondFrameWeighting {0.f};
-
-	Butterfly::RampedValue<float> morphingParam {1.f, 150};
 
 	// Constructor inits Osc with zero tables to prevent assert
 	//    MultiFrameOsc() = default;
 
 	MultiFrameOsc(float sampleRate, int internalTablesize, float oscFreq, int maxFrames) {
-		zeroData.resize(internalTablesize, 0.f);
-		zeroTable.setData(zeroData);
+		zeroTable.setData(std::vector<float>(internalTablesize, 0.f));
 		zeroTable.setMaximumPlaybackFrequency(sampleRate / 2.f);
 		zeroWavetable.push_back(zeroTable);
 
-		initOscNoFrame();
-
 		osc.setSampleRate(sampleRate);
 		osc.setFrequency(oscFreq);
+		setNoTables();
 
 		stackedFrames.maxFrames = maxFrames;
 
@@ -238,53 +204,151 @@ public:
 			return false;
 		}
 		stackedFrames.addFrame(data, sampleRate, splitFreqs, fftCalculator);
-		calculateIds();
-		setVisibility();
+		setMorphingParam(getMorphingParam());
+		numFramesChanged();
 		return true;
 	}
 
-
-	/// --------------------------------------------
-	struct RampingInstruction {
-		int    firstTable;
-		int    secondTable;
-		double pos;
-	};
-
-
-	int                             currentFirstTable {-1};
-	int                             currentSecondTable {-1};
-	double                          currentPos {};
-	std::vector<RampingInstruction> instructions;
-
-	void setPos(float _pos) {
-		pos = _pos;
-		calculateIds();
+	void removeSelectedFrame() {
+		if (stackedFrames.removeSelectedFrame()) {
+			numFramesChanged();
+		}
 	}
 
-	void calculateIds() {
+	void setMorphingParam(float newMorphingParam) {
+		normalizedMorphingParam = std::clamp(newMorphingParam, 0.f, 1.f);
+		morphingParamChanged();
+	}
+
+	float getMorphingParam() const {
+		return normalizedMorphingParam;
+	}
+
+	bool isMorphedWaveformAvailable() const {
+		return stackedFrames.frames.size() > 1;
+	}
+
+
+	// process() -> handelt morphingParam und Osc update
+	constexpr float operator++() {
+		++morphingParam;
+		if (!morphingParam.isRamping() && !instructions.empty()) {
+			auto instruction = instructions.back();
+			instructions.pop_back();
+			setTables(instruction.firstTable, instruction.secondTable);
+			morphingParam.setSteps(rampingStepsPerWavetable * std::abs(morphingParam() - instruction.normalizedMorphingParam)
+				* (currentFirstTable != currentSecondTable));
+			morphingParam.set(instruction.normalizedMorphingParam);
+			// if (instruction.type == InstructionType::Ramp) {
+			//}
+			// else {
+			//	// assert(morphingParam() == 1-);
+			//	if (instruction.pos == 0.) {
+			//		osc.setFirstTable(&stackedFrames.frames[instruction.firstTable].multitable);
+			//		currentFirstTable = instruction.firstTable;
+			//	}
+			//	else {
+			//		osc.setSecondTable(&stackedFrames.frames[instruction.firstTable].multitable);
+			//		currentFirstTable = instruction.firstTable - 1;
+			//	}
+			//	morphingParam.set(instruction.pos);
+			//}
+		}
+		osc.setParam(morphingParam());
+		return ++osc;
+	}
+
+	void updateMorphedSamples() {
+		if (stackedFrames.frames.size() < 2) {
+			return;
+		}
+		const auto& firstFrame  = stackedFrames.frames[targetFirstTable];
+		const auto& secondFrame = stackedFrames.frames[targetFirstTable + 1];
+		for (int i = 0; i < morphingSamples.size(); i++) {
+			morphingSamples[i] = firstFrame.samples[i] * (1.f - targetFractional) + secondFrame.samples[i] * targetFractional;
+		}
+	}
+
+	void setRampSpeed(int rampingStepsPerWavetable) {
+		this->rampingStepsPerWavetable = rampingStepsPerWavetable;
+	}
+
+	void moveUpSelectedFrame() {
+		stackedFrames.moveUpSelectedFrame();
+		tablesRearranged();
+	}
+
+	void moveDownSelectedFrame() {
+		stackedFrames.moveDownSelectedFrame();
+		tablesRearranged();
+	}
+
+private:
+	void setFirstTable(int index) {
+		assert(stackedFrames.frames.size() > index && "MultiOsc::setFirstTable(): index out of range");
+		osc.setFirstTable(&stackedFrames.frames[index].multitable);
+		currentFirstTable = index;
+		targetFirstTable  = currentFirstTable;
+	}
+
+	void setSecondTable(int index) {
+		assert(stackedFrames.frames.size() > index && "MultiOsc::setSecondTable(): index out of range");
+		osc.setSecondTable(&stackedFrames.frames[index].multitable);
+		currentSecondTable = index;
+	}
+
+	void setTables(int firstTableIndex, int secondTableIndex) {
+		setFirstTable(firstTableIndex);
+		setSecondTable(secondTableIndex);
+	}
+
+	void setNoTables() {
+		osc.setTables(&zeroWavetable, &zeroWavetable);
+		currentFirstTable = currentSecondTable = -1;
+	}
+
+	void numFramesChanged() {
+		const auto numFrames = stackedFrames.frames.size();
+		if (currentFirstTable < numFrames && currentSecondTable < numFrames)
+			return;
+		if (numFrames == 0) {
+			setNoTables();
+		}
+		else if (numFrames == 1) {
+			setTables(0, 0);
+		}
+		else {
+			setTables(numFrames - 2, numFrames - 1);
+		}
+		instructions.clear();
+		updateMorphedSamples();
+	}
+
+	void tablesRearranged() {
+		if (stackedFrames.frames.size() > 0) {
+			setTables(currentFirstTable, currentSecondTable);
+			updateMorphedSamples();
+		}
+	}
+
+	void morphingParamChanged() {
 		if (stackedFrames.frames.size() < 2)
 			return;
-		if (currentFirstTable == -1) {    // HACK
-			setTables(0, 1);
-			currentFirstTable  = 0;
-			currentSecondTable = 0;
-		}
-		float scaledPos  = pos * static_cast<float>(stackedFrames.frames.size() - 1);
-		auto  i1         = std::min<int>(static_cast<int>(scaledPos), stackedFrames.frames.size() - 2);
-		auto  i2         = i1 + 1;
-		auto  fractional = scaledPos - i1;
-		setMorphingPos(i1, fractional);
-		// Osc.setTable(&stackedFrames.frames[i1].multitable, &stackedFrames.frames[i2].multitable);
-		// morphingParam.set(pos);
+		float scaledPos  = normalizedMorphingParam * static_cast<float>(stackedFrames.frames.size() - 1);
+		targetFirstTable = std::min<int>(static_cast<int>(scaledPos), stackedFrames.frames.size() - 2);
+		targetFractional = scaledPos - targetFirstTable;
+		setWavetableMorphingPosition(targetFirstTable, targetFractional);
+		updateMorphedSamples();
 	}
+
 
 	// bugs:
 	// 1. slow change from first to last. sometimes both tables are same in osc. done
 	// 2.  wavetable 1-2 ->  3-4 then click within 3-4. done
 
-
-	void setMorphingPos(int newFirstTable, double fractional) {
+	/// @param newFirstTable  index to new first table
+	/// @param fractional     mixing amount firstTable/secondTable in the range [0,1]
+	void setWavetableMorphingPosition(int newFirstTable, double fractional) {
 		if (newFirstTable == currentFirstTable) {
 			instructions.clear();    // if in phase 1 or 3
 
@@ -294,13 +358,13 @@ public:
 				// when we jump during the second phase (going-down version) we dont want to finish the
 				// ramp but go back to currentFirstTable
 				if (morphingParam.getTarget() == 1.) {
-					morphingParam.setSteps(stepsPerWavetable);
+					morphingParam.setSteps(rampingStepsPerWavetable);
 					morphingParam.set(0.);
 				}
 				instructions.push_back({newFirstTable, newFirstTable + 1, fractional});
 			}
 			else {
-				morphingParam.setSteps(stepsPerWavetable * std::abs(morphingParam() - fractional));
+				morphingParam.setSteps(rampingStepsPerWavetable * std::abs(morphingParam() - fractional));
 				morphingParam.set(fractional);
 			}
 		}
@@ -315,7 +379,7 @@ public:
 				// when we jump during the second phase (going-down version) we dont want to finish the
 				// ramp but go back to currentFirstTable
 				if (morphingParam.getTarget() == 1.) {
-					morphingParam.setSteps(stepsPerWavetable * morphingParam());
+					morphingParam.setSteps(rampingStepsPerWavetable * morphingParam());
 					morphingParam.set(0.);
 				}
 			}
@@ -356,134 +420,32 @@ public:
 
 	*/
 
-	void setFirstTable(int index) {
-		osc.setFirstTable(&stackedFrames.frames[index].multitable);
-	}
-
-	void setSecondTable(int index) {
-		osc.setSecondTable(&stackedFrames.frames[index].multitable);
-	}
-
-	void setTables(int firstTableIndex, int secondTableIndex) {
-		setFirstTable(firstTableIndex);
-		setSecondTable(secondTableIndex);
-	}
-	int stepsPerWavetable {15000};
-
-	// process() -> handelt morphingParam und Osc update
-	constexpr float operator++() {
-		++morphingParam;
-		if (!morphingParam.isRamping() && !instructions.empty()) {
-			auto instruction = instructions.back();
-			instructions.pop_back();
-			setTables(instruction.firstTable, instruction.secondTable);
-			currentFirstTable  = instruction.firstTable;
-			currentSecondTable = instruction.secondTable;
-			morphingParam.setSteps(
-				stepsPerWavetable * std::abs(morphingParam() - instruction.pos) * (currentFirstTable != currentSecondTable));
-			morphingParam.set(instruction.pos);
-			// if (instruction.type == InstructionType::Ramp) {
-			//}
-			// else {
-			//	// assert(morphingParam() == 1-);
-			//	if (instruction.pos == 0.) {
-			//		osc.setFirstTable(&stackedFrames.frames[instruction.firstTable].multitable);
-			//		currentFirstTable = instruction.firstTable;
-			//	}
-			//	else {
-			//		osc.setSecondTable(&stackedFrames.frames[instruction.firstTable].multitable);
-			//		currentFirstTable = instruction.firstTable - 1;
-			//	}
-			//	morphingParam.set(instruction.pos);
-			//}
-		}
-		osc.setParam(morphingParam());
-		return ++osc;
-	}
+	int rampingStepsPerWavetable {15000};
 
 
-	void calculateIds1() {
-		if (stackedFrames.frames.size() < 1) {
-			isVisible            = false;    // setVisibility redundant?
-			firstFrameIdx        = 0;
-			secondFrameIdx       = 0;
-			firstFrameWeighting  = 1.f;
-			secondFrameWeighting = 0.f;
-			initOscNoFrame();
-		}
-		else if (stackedFrames.frames.size() == 1) {
-			isVisible            = false;
-			firstFrameIdx        = 0;
-			secondFrameIdx       = 1;
-			firstFrameWeighting  = 1.f;
-			secondFrameWeighting = 0.f;
-			initOscOneFrame();
-		}
-		else {
-			float scaledPos = pos * static_cast<float>(stackedFrames.frames.size() - 1);    // Scale position to frame count
-			struct Idcs {
-				int firstIdx {0}, secondIdx {1};
-			};
-			//            std::pair<int> tempIdcs;
-			Idcs tempIdcs;
-			tempIdcs.firstIdx  = floor(scaledPos);    // Können auch gleich sein!
-			tempIdcs.secondIdx = ceil(scaledPos);
-			float fracPos, intpart;
-			fracPos = modf(scaledPos, &intpart);
-
-			// Change only one Idx if possible (to avoid clicks)
-			// Switch case group better?
-			if (tempIdcs.firstIdx == firstFrameIdx) {
-				secondFrameIdx       = tempIdcs.secondIdx;
-				firstFrameWeighting  = (1.f - fracPos);    // einmalig ausrechnen
-				secondFrameWeighting = (fracPos);
-			}
-			else if (tempIdcs.firstIdx == secondFrameIdx) {
-				firstFrameIdx        = tempIdcs.secondIdx;
-				firstFrameWeighting  = (fracPos);
-				secondFrameWeighting = (1.f - fracPos);
-			}
-			else if (tempIdcs.secondIdx == firstFrameIdx) {
-				secondFrameIdx       = tempIdcs.firstIdx;
-				firstFrameWeighting  = (fracPos);
-				secondFrameWeighting = (1.f - fracPos);
-			}
-			else if (tempIdcs.secondIdx == secondFrameIdx) {
-				firstFrameIdx        = tempIdcs.firstIdx;
-				firstFrameWeighting  = (1.f - fracPos);
-				secondFrameWeighting = (fracPos);
-			}
-			else {
-				firstFrameIdx        = tempIdcs.firstIdx;
-				secondFrameIdx       = tempIdcs.secondIdx;
-				firstFrameWeighting  = (1.f - fracPos);
-				secondFrameWeighting = (fracPos);
-			}
-			osc.setTables(&stackedFrames.frames[firstFrameIdx].multitable, &stackedFrames.frames[secondFrameIdx].multitable);
-			//            Osc.setParam(secondFrameWeighting);
-			morphingParam.set(secondFrameWeighting);
-
-			//            std::cout << "fracPos:              " << fracPos << std::endl;
-			//            std::cout << "tempFirstIdx:         " << tempIdcs.firstIdx << std::endl;
-			//            std::cout << "tempSecondIdx:        " << tempIdcs.secondIdx << std::endl;
-			//            std::cout << "firstFrameIdx:        " << firstFrameIdx << std::endl;
-			//            std::cout << "secondFrameIdx:       " << secondFrameIdx << std::endl;
-			//            std::cout << "firstFrameWeighting:  " << firstFrameWeighting << std::endl;
-			//            std::cout << "secondFrameWeighting: " << secondFrameWeighting << std::endl;
-			updateMorphingSamples();
-		}
-	}
+	struct RampingInstruction {
+		int    firstTable;
+		int    secondTable;
+		double normalizedMorphingParam;
+	};
 
 
-	void updateMorphingSamples() {
-		if (stackedFrames.frames.size() < 2) {
-			return;
-		}
-		for (int i = 0; i < morphingSamples.size(); i++) {
-			morphingSamples[i] = stackedFrames.frames[firstFrameIdx].samples[i] * firstFrameWeighting
-				+ stackedFrames.frames[secondFrameIdx].samples[i] * secondFrameWeighting;
-		}
-	}
+	int                             currentFirstTable {-1};
+	int                             currentSecondTable {-1};
+	double                          currentPos {};
+	double                          targetFractional {};
+	double                          targetFirstTable {};
+	std::vector<RampingInstruction> instructions;
+
+
+	Wavetable                       zeroTable;    // for init Osc with no frame
+	std::vector<Wavetable>          zeroWavetable;
+
+	float normalizedMorphingParam {1.f};
+
+	Butterfly::RampedValue<float> morphingParam {1.f, 150};
+
+	/// --------------------------------------------
 };
 
 int calculateSplitFreqs(

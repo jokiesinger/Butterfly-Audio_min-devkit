@@ -68,7 +68,7 @@ public:
     attribute<color> selection_color {this, "Selection Color", {.8f, .8f, .8f, .8f}};
     attribute<color> morphed_frame_color {this, "Morphed Frame Color", {1.f, 1.f, 1.f, 1.f}};
     attribute<bool> use_fat_lines_for_selection {this, "Draw selected waveforms fat", false};
-    attribute<int> rampSteps {this, "Draw selected waveforms fat", 15000};
+    attribute<int> rampSteps {this, "Ramp steps per wavetable", 15000};
     
     attribute<int, threadsafe::no, limit::clamp> m_channel {
         this, "Channel", 1,
@@ -141,7 +141,6 @@ public:
             notifyStackedTablesStatus();
             redraw();
             buf.dirty();
-            buf.~buffer_lock();
             return{};
         }
     };
@@ -149,7 +148,7 @@ public:
     message<> flip_phase {
         this, "flip_phase", MIN_FUNCTION {
             multiFrameOsc.stackedFrames.flipPhase();
-            multiFrameOsc.updateMorphingSamples();
+            multiFrameOsc.updateMorphedSamples();
             redraw();
             return{};
         }
@@ -157,11 +156,7 @@ public:
     
     message<> move_up_selected_frame {
         this, "move_up_selected_frame", MIN_FUNCTION {
-            if (!multiFrameOsc.stackedFrames.moveUpSelectedFrame()) {
-                cout << "Can't move up selected frame.\n";
-            } else {
-                multiFrameOsc.calculateIds();
-            }
+            multiFrameOsc.moveUpSelectedFrame();
             redraw();
             return {};
         }
@@ -169,23 +164,15 @@ public:
 
     message<> move_down_selected_frame {
         this, "move_down_selected_frame", MIN_FUNCTION {
-            if (!multiFrameOsc.stackedFrames.moveDownSelectedFrame()) {
-                cout << "Can't move down selected frame.\n";
-            } else {
-                multiFrameOsc.calculateIds();
-            }
+            multiFrameOsc.moveDownSelectedFrame();
             redraw();
             return{};
         }
     };
     
     message<> delete_selected_frame {
-        this, "delete_selected_frame", MIN_FUNCTION {
-            if (!multiFrameOsc.stackedFrames.removeSelectedFrame()) {
-                cout << "No frame to delete.\n";
-            } else {
-                multiFrameOsc.calculateIds();
-            }
+		this, "delete_selected_frame", MIN_FUNCTION {
+            multiFrameOsc.removeSelectedFrame();
             notifyStackedTablesStatus();
             redraw();
             return {};
@@ -216,9 +203,9 @@ public:
     
     message<> morph_position {
         this, "morph_position", MIN_FUNCTION {
-            multiFrameOsc.setPos(std::clamp(static_cast<float>(args[0]), 0.f, 1.f));
+            multiFrameOsc.setMorphingParam(static_cast<float>(args[0]));
 	       //multiFrameOsc.morphingParam.setSteps(rampSteps);
-	       multiFrameOsc.stepsPerWavetable = rampSteps;
+	       multiFrameOsc.setRampSpeed(rampSteps);
             redraw();
             return{};
         }
@@ -346,12 +333,12 @@ public:
     
     float updateMorphFrameYOffset(target t) {
         float yOffset = (spacing / 2.f) + (margin / 2.f);
-        float morphFrameYOffset = multiFrameOsc.pos * (t.height() - (yOffset * 2.f));
+        float morphFrameYOffset = multiFrameOsc.getMorphingParam() * (t.height() - (yOffset * 2.f));
         return morphFrameYOffset + yOffset;
     }
     
     void draw_morphable_frame(target t) {
-        if (multiFrameOsc.isVisible) {
+        if (multiFrameOsc.isMorphedWaveformAvailable()) {
             float morphFrameYOffset = updateMorphFrameYOffset(t);
             float origin_x = 0.f + (margin / 2.f);
             float origin_y = (multiFrameOsc.morphingSamples[0] * yScaling * -1.f) + morphFrameYOffset;
@@ -387,7 +374,7 @@ public:
         auto out = output.samples(0);
 
         for (auto i = 0; i < input.frame_count(); ++i) {
-            out[i] = ++multiFrameOsc * outputGain++;
+            out[i] = ++multiFrameOsc * ++outputGain;
         }
     }
 };

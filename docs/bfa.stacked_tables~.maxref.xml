@@ -98,6 +98,11 @@
 			<description></description>
 		</attribute>
 
+		<attribute name='Ramp steps per wavetable' get='1' set='1' type='long' size='1' >
+			<digest></digest>
+			<description></description>
+		</attribute>
+
 		<attribute name='Background Color' get='1' set='1' type='float64' size='1' >
 			<digest></digest>
 			<description></description>
@@ -113,9 +118,9 @@
 			<description></description>
 		</attribute>
 
-		<attribute name='Draw selected waveforms fat' get='1' set='1' type='long' size='1' >
-			<digest></digest>
-			<description></description>
+		<attribute name='Export Buffer' get='1' set='1' type='symbol' size='1' >
+			<digest>Name of buffer~ to write to</digest>
+			<description>Name of buffer~ to write to. </description>
 		</attribute>
 
 		<attribute name='Input Buffer' get='1' set='1' type='symbol' size='1' >
@@ -123,9 +128,9 @@
 			<description>Name of buffer~ to read from </description>
 		</attribute>
 
-		<attribute name='Export Buffer' get='1' set='1' type='symbol' size='1' >
-			<digest>Name of buffer~ to write to</digest>
-			<description>Name of buffer~ to write to. </description>
+		<attribute name='Draw selected waveforms fat' get='1' set='1' type='long' size='1' >
+			<digest></digest>
+			<description></description>
 		</attribute>
 
 		<attribute name='Channel' get='1' set='1' type='long' size='1' >
