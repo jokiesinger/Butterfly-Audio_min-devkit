@@ -245,18 +245,12 @@ public:
 
 
 	/// --------------------------------------------
-	enum class InstructionType { Ramp, Jump };
-	enum class RampingPhase { NoPhase, RampToSingleTable, RampBetweenNonconsecutiveTables, RampFromSingleTable };
-
 	struct RampingInstruction {
-		int             firstTable;
-		int             secondTable;
-		double          pos;
-		InstructionType type;
+		int    firstTable;
+		int    secondTable;
+		double pos;
 	};
 
-
-	RampingPhase rampingPhase {RampingPhase::NoPhase};
 
 	int                             currentFirstTable {-1};
 	int                             currentSecondTable {-1};
@@ -303,11 +297,10 @@ public:
 					morphingParam.setSteps(stepsPerWavetable);
 					morphingParam.set(0.);
 				}
-				instructions.push_back({newFirstTable, newFirstTable + 1, fractional, InstructionType::Ramp});
+				instructions.push_back({newFirstTable, newFirstTable + 1, fractional});
 			}
 			else {
 				morphingParam.setSteps(stepsPerWavetable * std::abs(morphingParam() - fractional));
-
 				morphingParam.set(fractional);
 			}
 		}
@@ -329,15 +322,15 @@ public:
 
 			instructions.clear();
 			if (newFirstTable > currentFirstTable) {
-				instructions.push_back({newFirstTable, newFirstTable + 1, fractional, InstructionType::Ramp});    // third
+				instructions.push_back({newFirstTable, newFirstTable + 1, fractional});    // third
 				// second, can be omitted if newFirstTable == currentFirstTable+1
-				instructions.push_back({newFirstTable, currentFirstTable + 1, 0., InstructionType::Jump});
-				instructions.push_back({currentFirstTable, currentFirstTable + 1, 1., InstructionType::Ramp});    // first step
+				instructions.push_back({newFirstTable, currentFirstTable + 1, 0.});
+				instructions.push_back({currentFirstTable, currentFirstTable + 1, 1.});    // first step
 			}
 			else {
-				instructions.push_back({newFirstTable, newFirstTable + 1, fractional, InstructionType::Ramp});
-				instructions.push_back({currentFirstTable, newFirstTable + 1, 1., InstructionType::Jump});
-				instructions.push_back({currentFirstTable, currentFirstTable + 1, 0., InstructionType::Ramp});
+				instructions.push_back({newFirstTable, newFirstTable + 1, fractional});
+				instructions.push_back({currentFirstTable, newFirstTable + 1, 1.});
+				instructions.push_back({currentFirstTable, currentFirstTable + 1, 0.});
 			}
 		}
 		assert(instructions.size() <= 3);
