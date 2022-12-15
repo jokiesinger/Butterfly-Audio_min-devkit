@@ -37,7 +37,7 @@ private:
     
     MultiFrameOsc multiFrameOsc;
 
-    Butterfly::RampedValue<float> outputGain{1.f, 150};
+    Butterfly::RampedValue<float> outputGain{1.f, 15000};
     
 public:
     MIN_DESCRIPTION     { "Display and edit stacked frames." };
@@ -68,6 +68,7 @@ public:
     attribute<color> selection_color {this, "Selection Color", {.8f, .8f, .8f, .8f}};
     attribute<color> morphed_frame_color {this, "Morphed Frame Color", {1.f, 1.f, 1.f, 1.f}};
     attribute<bool> use_fat_lines_for_selection {this, "Draw selected waveforms fat", false};
+    attribute<int> rampSteps {this, "Draw selected waveforms fat", 15000};
     
     attribute<int, threadsafe::no, limit::clamp> m_channel {
         this, "Channel", 1,
@@ -105,7 +106,7 @@ public:
     message<> dspsetup {
         this, "dspsetup", MIN_FUNCTION {
             sampleRate = static_cast<float>(args[0]);
-            multiFrameOsc.Osc.setSampleRate(sampleRate);
+            multiFrameOsc.osc.setSampleRate(sampleRate);
             cout << "dspsetup happend" << endl;
             return {};
         }
@@ -216,6 +217,8 @@ public:
     message<> morph_position {
         this, "morph_position", MIN_FUNCTION {
             multiFrameOsc.setPos(std::clamp(static_cast<float>(args[0]), 0.f, 1.f));
+	       //multiFrameOsc.morphingParam.setSteps(rampSteps);
+	       multiFrameOsc.stepsPerWavetable = rampSteps;
             redraw();
             return{};
         }
@@ -224,7 +227,7 @@ public:
     message<> set_freq {
         this, "set_freq", MIN_FUNCTION {
             oscillatorFreq = std::clamp(static_cast<double>(args[0]), 1., static_cast<double>(sampleRate) / 2.);
-            multiFrameOsc.Osc.setFrequency(oscillatorFreq.get());
+            multiFrameOsc.osc.setFrequency(oscillatorFreq.get());
             return{};
         }
     };
