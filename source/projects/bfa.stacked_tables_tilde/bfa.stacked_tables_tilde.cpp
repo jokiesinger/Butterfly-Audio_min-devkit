@@ -12,7 +12,8 @@
 #include "ramped_value.h"
 
 
-#include "stacked_tables_helper_functions.h"
+//#include "stacked_tables_helper_functions.h"
+#include "stacked_frames.h"
 
 //using namespace Butterfly;
 using namespace c74::min;
@@ -26,6 +27,7 @@ private:
     float yScaling;
     float yOffset;
     float margin{10.f};
+    fifo<int>
     
     float sampleRate{48000.f};
 
@@ -35,9 +37,10 @@ private:
     std::vector<float> splitFreqs;
     const Butterfly::FFTCalculator<float, internalTablesize> fftCalculator;
     
-    MultiFrameOsc multiFrameOsc;
+    //MultiFrameOsc multiFrameOsc;
 
     Butterfly::RampedValue<float> outputGain{1.f, 15000};
+
     
 public:
     MIN_DESCRIPTION     { "Display and edit stacked frames." };
@@ -100,7 +103,8 @@ public:
          
 
     stacked_tables_tilde(const atoms& args = {}) : ui_operator::ui_operator {this, args}, multiFrameOsc{sampleRate, internalTablesize, static_cast<float>(oscillatorFreq.get()), maxFrames} {
-        nIntervalls = calculateSplitFreqs(splitFreqs);
+        splitFreqs = calculateSplitFreqs(2.f, sampleRate / 2.f, 5.f);
+        nIntervalls = splitFreqs.size();
     }
     
     message<> dspsetup {

@@ -23,6 +23,8 @@ include_directories(
 set( SOURCE_FILES
 	${PROJECT_NAME}.cpp
 	stacked_tables_helper_functions.h
+    audio_processor.h
+    stacked_frames.h
 )
 
 add_library( 

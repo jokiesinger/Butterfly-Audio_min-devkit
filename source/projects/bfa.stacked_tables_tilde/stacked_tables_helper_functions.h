@@ -275,13 +275,13 @@ public:
 private:
 	void setFirstTable(int index) {
 		assert(stackedFrames.frames.size() > index && "MultiOsc::setFirstTable(): index out of range");
-		osc.setFirstTable(&stackedFrames.frames[index].multitable);
+		osc.setFirstTable<std::vector<Wavetable>>(&stackedFrames.frames[index].multitable);
 		currentFirstTable = index;
 	}
 
 	void setSecondTable(int index) {
 		assert(stackedFrames.frames.size() > index && "MultiOsc::setSecondTable(): index out of range");
-		osc.setSecondTable(&stackedFrames.frames[index].multitable);
+		osc.setSecondTable<std::vector<Wavetable>>(&stackedFrames.frames[index].multitable);
 		currentSecondTable = index;
 	}
 
@@ -429,7 +429,7 @@ private:
 	Wavetable              zeroTable;    // for init osc with no frame
 	std::vector<Wavetable> zeroWavetable;
 };
-
+/*
 int calculateSplitFreqs(
 	std::vector<float>& splitFreqs, float semitones = 2.f, float highestSplitFreq = 22050.f, int lowestSplitFreq = 5.f) {
 	float       currentFreq = highestSplitFreq;
@@ -441,3 +441,4 @@ int calculateSplitFreqs(
 	std::reverse(splitFreqs.begin(), splitFreqs.end());
 	return splitFreqs.size();
 }
+*/
