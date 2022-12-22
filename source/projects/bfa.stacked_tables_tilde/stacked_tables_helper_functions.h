@@ -172,14 +172,15 @@ class MultiFrameOsc
 {
 	using Wavetable = Butterfly::Wavetable<float>;
 	using TableOsc = Butterfly::WavetableOscillator<Wavetable>;
-	using Osc = Butterfly::MultiMorphingWavetableOscillator<TableOsc>;
+	using Osc = Butterfly::MorphingWavetableOscillator<TableOsc>;
 public:
 	StackedFrames stackedFrames{};
-	Butterfly::MorpingWavetableOscillator<TableOsc> osc;
+	Butterfly::DualWavetableOscillator<TableOsc> osc;
 	Osc osc1;
 
 
 	std::vector<float> morphingSamples; // for graphics
+
 
 
 	// Constructor inits Osc with zero tables to prevent assert
@@ -220,9 +221,9 @@ public:
 	}
 
 	void framesChanged() {
-		std::vector<std::span<Wavetable>> data;
+		std::vector<std::span<const Wavetable>> data;
 		for (auto& frame : stackedFrames.frames) {
-			data.push_back(std::span<Wavetable>{ frame.multitable.begin(), frame.multitable.end() });
+			data.push_back(std::span<const Wavetable>{ frame.multitable.begin(), frame.multitable.end() });
 		}
 		osc1.setWaveforms(data);
 	}
