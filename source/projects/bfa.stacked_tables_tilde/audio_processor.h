@@ -1,11 +1,12 @@
 #pragma once
-#include "wavetable_oscillator.h"
+
+#include "morphing_wavetable_oscillator.h"
 #include "release_pool.h"
 
 namespace Butterfly {
 
 enum class ParameterType {
-    gain, frequency, morphPos
+    gain, frequency, morphPos, sampleRate
 };
 
 struct Event {
@@ -19,8 +20,21 @@ class AudioProcessor {
     using State = MultitableCollection;
 public:
     
-    AudioProcessor() {}
+    //Copy assignment constructor? Or init() function?
+    /*
+     AudioProcessor(double f, double sR) : frequency{f} {
+        setSampleRate(sR);
+    }
+    */
+    void init(double oscFreq, double sampleRate, double gain = 1.) {
+        setSampleRate(sampleRate);
+        frequency.set(oscFreq);
+        this->gain.set(gain);
+    }
     
+    //=====================================
+    //                UI
+    //=====================================
     // UI thread only!
     void changeState(State&& newState) {
         auto newSharedState = std::make_shared<State>(newState);
@@ -29,24 +43,29 @@ public:
         releasePool.clearUnused();
     }
     // UI thread only!
-    void sendEvent(Event event) {
-        eventQueue.push(event);
+    void addParamEvent(Event event) {
+        eventQueue.enqueue(event);
     }
     
+    //=====================================
+    //               AUDIO
+    //=====================================
+    
     // Audio thread
-    void process() {
+    void process(c74::min::audio_bundle &buffer) {
         auto newState = std::atomic_load(&currentState);
         if (previousState != newState.get()) {
             previousState = newState.get();
             //osc.setTables(...)
         }
-        Event event
+        Event event;    //Allocation in process function? -> I would go with atomic<double> value.store() & value.load()
         while (eventQueue.try_dequeue(event)) {
             processEvent(event);
         }
-        //TODO: Audio
         
-        
+        for (auto i = 0; i < buffer.frame_count(); ++i) {
+            buffer.samples(0)[i] = ++osc * ++gain;
+        }
     }
     
 private:
@@ -61,6 +80,9 @@ private:
                 break;
             case ParameterType::morphPos:
                 setMorphPos(event.value);
+                break;
+            case ParameterType::sampleRate:
+                setSampleRate(event.value);
                 break;
         }
     }
@@ -77,8 +99,12 @@ private:
         ///TODO: …
     }
     
-    Osc osc;
-    RampedValue gain{1.}, frequency{10.};
+    void setSampleRate(double sampleRate) {
+        osc.setSampleRate(sampleRate);
+    }
+    
+    MorphingWavetableOscillator<WavetableOscillator<Wavetable<float>>> osc;
+    RampedValue<double> gain{1.}, frequency{10.};
     std::shared_ptr<State> currentState{};
     State* previousState{};
     ReleasePool<MultitableCollection> releasePool;
