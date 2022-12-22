@@ -13,8 +13,11 @@
 
 #include "stacked_frames.h"
 
+/*
 #define INTERNAL_TABLESIZE 2048
 #define MAX_FRAMES 16
+inline constexpr int internalTablesize = 2048;
+*/
 
 //using namespace Butterfly;
 using namespace c74::min;
@@ -148,9 +151,17 @@ public:
         }
     };
     
+    message<> normalize_frame {
+        this, "normalize_frame", MIN_FUNCTION {
+            stackedFrames.normalize();
+            redraw();
+            return{};
+        }
+    };
+    
     message<> move_up_selected_frame {
         this, "move_up_selected_frame", MIN_FUNCTION {
-            stackedFrames.moveUpSelectedFrame();
+            stackedFrames.moveDownSelectedFrame();      //Not a bug!
             redraw();
             return {};
         }
@@ -158,7 +169,7 @@ public:
 
     message<> move_down_selected_frame {
         this, "move_down_selected_frame", MIN_FUNCTION {
-            stackedFrames.moveDownSelectedFrame();
+            stackedFrames.moveUpSelectedFrame();
             redraw();
             return{};
         }
@@ -290,7 +301,8 @@ public:
             float position = 0.f;
             float width = t.width() - margin;
             float frac     = static_cast<float>(internalTablesize) / width;
-            if (stackedFrames.getSelectedFrameIdx() == frameIdx) {
+            auto selectedIdx = stackedFrames.getSelectedFrameIdx();
+            if (selectedIdx && frameIdx == selectedIdx) {
                  if (use_fat_lines_for_selection) {
                       stroke_width = 1.5f;
                  } else {

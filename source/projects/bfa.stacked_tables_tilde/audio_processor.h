@@ -14,21 +14,23 @@ struct Event {
     double value{};
 };
 
+
+template<typename It>
+constexpr auto make_span(It begin, It end) {
+    return std::span<std::remove_pointer_t<typename std::iterator_traits<It>::pointer>>(&(*begin), std::distance(begin, end));
+}
+
 class AudioProcessor {
     using Multitable = std::vector<Wavetable<float>>;
     using MultitableCollection = std::vector<Multitable>;
     using State = MultitableCollection;
-public:
     
-    //Copy assignment constructor? Or init() function?
-    /*
-     AudioProcessor(double f, double sR) : frequency{f} {
-        setSampleRate(sR);
-    }
-    */
-    void init(double oscFreq, double sampleRate, double gain = 1.) {
+public:
+    void init(double oscFreq, double sampleRate, int maxFrames, double gain = 1.) {
         setSampleRate(sampleRate);
         frequency.set(oscFreq);
+        osc.setMaxNumWaveforms(maxFrames);
+        waveforms.reserve(maxFrames);
         this->gain.set(gain);
     }
     
@@ -56,7 +58,12 @@ public:
         auto newState = std::atomic_load(&currentState);
         if (previousState != newState.get()) {
             previousState = newState.get();
-            //osc.setTables(...)
+            waveforms.clear();
+            assert(waveforms.capacity() >= newState->size());
+            for (const auto &multitable : *newState) {
+                waveforms.push_back(make_span(multitable.begin(), multitable.end()));
+            }
+            osc.setWaveforms(waveforms);
         }
         Event event;    //Allocation in process function? -> I would go with atomic<double> value.store() & value.load()
         while (eventQueue.try_dequeue(event)) {
@@ -65,6 +72,7 @@ public:
         
         for (auto i = 0; i < buffer.frame_count(); ++i) {
             buffer.samples(0)[i] = ++osc * ++gain;
+            frequency++;
         }
     }
     
@@ -93,6 +101,7 @@ private:
 
     void setFrequency(double frequency) {
         this->frequency.set(frequency);
+        osc.setFrequency(frequency);
     }
     
     void setMorphPos(double morphPos) {
@@ -102,9 +111,11 @@ private:
     void setSampleRate(double sampleRate) {
         osc.setSampleRate(sampleRate);
     }
+
     
     MorphingWavetableOscillator<WavetableOscillator<Wavetable<float>>> osc;
-    RampedValue<double> gain{1.}, frequency{10.};
+    std::vector<std::span<const Wavetable<float>>> waveforms;
+    RampedValue<double> gain{1.}, frequency{10.};       //Probably not needed
     std::shared_ptr<State> currentState{};
     State* previousState{};
     ReleasePool<MultitableCollection> releasePool;

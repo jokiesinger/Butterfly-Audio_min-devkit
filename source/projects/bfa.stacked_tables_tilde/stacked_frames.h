@@ -7,6 +7,8 @@
 #include "release_pool.h"
 #include "audio_processor.h"
 
+inline constexpr float minusOneDb = 0.891251;   //-1dB
+
 namespace Butterfly {
 
 struct Frame {
@@ -61,8 +63,10 @@ class StackedFrames {
     
 public:
     //Ist es in Ordnung nur diesen Konstruktor zu implementieren?
-    StackedFrames(float sR, int iT, float oF, int mF) : maxFrames(mF), internalTablesize(iT) {
-        audioProcessor.init(oF, sR);
+    StackedFrames(float sampleRate, int internalTablesize, float oscFreq, int maxFrames) : maxFrames(maxFrames), internalTablesize(internalTablesize) {
+        audioProcessor.init(oscFreq, sampleRate, maxFrames);
+        morphedWaveform.resize(internalTablesize, 0.f);
+        //frames.clearSelection();        //Not the way to go
     }
     
     template<int internalTablesize>
@@ -71,66 +75,76 @@ public:
         if (frames.size() >= maxFrames) { return false; }
         frames.add(createFrame(data, sampleRate, splitFreqs, fftCalculator));
         frames.select(frames.size() - 1);
-        sendFramesToAudioProcessor();
+        framesChanged();
         return true;
     }
     
     void flipPhase() {
-        size_t idx = frames.getSelectionIndex();
-        if (idx == -1) {return;}
-        for (float& sample : frames.at(idx).samples) {
-            sample *= -1.f;
+        if (auto idx = frames.getSelectionIndex()) {
+            for (float& sample : frames.at(*idx).samples) {
+                sample *= -1.f;
+            }
+            for (auto& wavetable : frames.at(*idx).multitable) {
+                wavetable *= -1.f;
+            }
+            framesChanged();
         }
-        for (auto& wavetable : frames.at(idx).multitable) {
-            wavetable *= -1.f;
+    }
+    
+    void normalize() {
+        if (auto idx = frames.getSelectionIndex()) {
+            //Get peak out of raw data (same normalization value for all tables in multitable)
+            const auto inv = minusOneDb / Butterfly::peak(frames.at(*idx).samples.begin(), frames.at(*idx).samples.end());
+            for (float& sample : frames.at(*idx).samples) {
+                sample *= inv;
+            }
+            for (auto& wavetable : frames.at(*idx).multitable) {
+                wavetable *= inv;
+            }
+            framesChanged();
         }
-        updateMorphedWaveform();
-        sendFramesToAudioProcessor();
     }
     
     void moveUpSelectedFrame() {
-        size_t idx = frames.getSelectionIndex();
-        if (idx == -1) {return;}
-        frames.moveUp(idx, 1);
-        updateMorphedWaveform();
-        sendFramesToAudioProcessor();
+        if (auto idx = frames.getSelectionIndex()) {
+            if (idx < frames.size() - 1) {
+                frames.moveUp(*idx, 1);
+                frames.select(*idx + 1);
+                framesChanged();
+            }
+        }
     }
     
     void moveDownSelectedFrame() {
-        size_t idx = frames.getSelectionIndex();
-        if (idx == -1) {return;}
-        frames.moveDown(idx, 1);
-        updateMorphedWaveform();
-        sendFramesToAudioProcessor();
+        if (auto idx = frames.getSelectionIndex()) {
+            if (idx > 0) {
+                frames.moveDown(*idx, 1);
+                frames.select(*idx - 1);
+                framesChanged();
+            }
+        }
     }
     
     void removeSelectedFrame() {
-        size_t idx = frames.getSelectionIndex();
-        if (idx == -1) {return;}
-        frames.remove(idx);
-        updateMorphedWaveform();
-        sendFramesToAudioProcessor();
+        if (auto idx = frames.getSelectionIndex()) {
+            frames.remove(*idx);
+            framesChanged();
+        }
     }
     
     void clearAll() {
         frames.clear();
-        updateMorphedWaveform();
-        sendFramesToAudioProcessor();   //What is happening hear?
+        framesChanged();
     }
     
     void selectFrame(size_t idx) {
         if (idx >= frames.size()) { return; }
-        frames.clearSelection();
+        //frames.clearSelection();      //redundant atm
         frames.select(idx);
     }
     
     std::optional<size_t> getSelectedFrameIdx() {
-        ///TODO: What if nothing is selected? Possible?
-        if (auto idx = frames.getSelectionIndex()) {
-            return idx;
-        } else {
-            return {};
-        }
+        return frames.getSelectionIndex();
     }
     
     std::optional<std::vector<float>> getConcatenatedFrames(int exportTablesize) {
@@ -167,11 +181,11 @@ public:
     float getNormalizedMorphPos() { return normalizedMorphPos; }
     
     bool isMorphedWaveformAvailable() const {
-        return frames.size() > 1 && !morphedWaveform.empty();
+        return (frames.size() > 1) && (!morphedWaveform.empty());
     }
     
     std::optional<std::vector<float>> getMorphedWaveformSamples() {
-        if (isMorphedWaveformAvailable()) { return {}; }
+        if (!isMorphedWaveformAvailable()) { return {}; }
         return morphedWaveform;
     }
     
@@ -190,7 +204,7 @@ public:
     
     void setNormalizedMorphPos(float morphPos) {
         normalizedMorphPos = std::clamp(morphPos, 0.f, 1.f);
-        normalizedMorphPosChanged();
+        updateMorphedWaveform();
         audioProcessor.addParamEvent({ParameterType::morphPos, normalizedMorphPos});
     }
     
@@ -206,20 +220,21 @@ private:
     
     void updateMorphedWaveform() {
         if (frames.size() < 2) { return; }
+        const auto [currentFirstTable, fracMorphPos] = computeMorphingStuff(normalizedMorphPos, frames.size());    //structured binding
         const auto& firstFrame  = frames[currentFirstTable];
         const auto& secondFrame = frames[currentFirstTable + 1];
-        for (int i = 0; i < morphedWaveform.size(); i++) {
+        for (size_t i = 0; i < morphedWaveform.size(); i++) {
             morphedWaveform[i] = firstFrame.samples[i] * (1.f - fracMorphPos) + secondFrame.samples[i] * fracMorphPos;
         }
     }
-    
+    /*
     void normalizedMorphPosChanged() {
         auto result = computeMorphingStuff(normalizedMorphPos, frames.size());
         currentFirstTable = result.first;
         fracMorphPos = result.second;
         updateMorphedWaveform();
     }
-    
+    */
     void sendFramesToAudioProcessor() {
         State state;
         for (const auto &frame : frames) {
@@ -228,11 +243,16 @@ private:
         audioProcessor.changeState(std::move(state));
     }
     
+    void framesChanged() {
+        updateMorphedWaveform();
+        sendFramesToAudioProcessor();
+    }
+    
     ItemCollection<Frame> frames;
     size_t maxFrames{}, internalTablesize{};
     std::vector<float> morphedWaveform;
-    int currentFirstTable{};
-    float fracMorphPos{};
+    //int currentFirstTable{};
+    //float fracMorphPos{};
     float normalizedMorphPos{};
     float sampleRate{};
     ReleasePool<MultitableCollection> releasePool;
