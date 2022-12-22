@@ -279,12 +279,12 @@ public:
             return {};
         }
     };
-     
+    
+    ///TODO: Could be refactored
     void drawStackedFrames(int frameIdx, target t) {
         if (auto frameSamples = stackedFrames.getFrame(frameIdx)) {
             yOffset = (spacing * static_cast<float>(frameIdx)) + (spacing / 2.f) + (margin / 2.f);
             float stroke_width = 1.f;
-            //if (multiFrameOsc.stackedFrames.frames[f].isSelected){stroke_width = 1.5f;};
             float origin_x = margin / 2.f;
             float origin_y = (frameSamples->at(0) * yScaling * -1.f) + yOffset;
             float position = 0.f;

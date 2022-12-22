@@ -96,7 +96,7 @@ private:
     }
     
     void setMorphPos(double morphPos) {
-        ///TODO: …
+        osc.setNormalizedMorphingParam(morphPos);
     }
     
     void setSampleRate(double sampleRate) {

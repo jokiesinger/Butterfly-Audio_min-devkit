@@ -205,8 +205,14 @@ public:
 private:
     
     void updateMorphedWaveform() {
-        //copy from helper_functions
+        if (frames.size() < 2) { return; }
+        const auto& firstFrame  = frames[currentFirstTable];
+        const auto& secondFrame = frames[currentFirstTable + 1];
+        for (int i = 0; i < morphedWaveform.size(); i++) {
+            morphedWaveform[i] = firstFrame.samples[i] * (1.f - fracMorphPos) + secondFrame.samples[i] * fracMorphPos;
+        }
     }
+    
     void normalizedMorphPosChanged() {
         auto result = computeMorphingStuff(normalizedMorphPos, frames.size());
         currentFirstTable = result.first;
