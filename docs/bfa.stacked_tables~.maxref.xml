@@ -31,19 +31,9 @@
 
 	<methodlist>
 
-		<method name='set_export_tablesize'>
-			<digest></digest>
-			<description></description>
-		</method>
-
-		<method name='set_output_gain'>
-			<digest></digest>
-			<description></description>
-		</method>
-
-		<method name='move_up_selected_frame'>
-			<digest></digest>
-			<description></description>
+		<method name='add_frame'>
+			<digest>Read from input buffer </digest>
+			<description>Read from input buffer </description>
 		</method>
 
 		<method name='clear_all'>
@@ -51,22 +41,7 @@
 			<description></description>
 		</method>
 
-		<method name='delete_selected_frame'>
-			<digest></digest>
-			<description></description>
-		</method>
-
-		<method name='export_table'>
-			<digest></digest>
-			<description></description>
-		</method>
-
-		<method name='move_down_selected_frame'>
-			<digest></digest>
-			<description></description>
-		</method>
-
-		<method name='flip_phase'>
+		<method name='normalize_frame'>
 			<digest></digest>
 			<description></description>
 		</method>
@@ -76,14 +51,44 @@
 			<description></description>
 		</method>
 
+		<method name='move_up_selected_frame'>
+			<digest></digest>
+			<description></description>
+		</method>
+
+		<method name='flip_phase'>
+			<digest></digest>
+			<description></description>
+		</method>
+
+		<method name='move_down_selected_frame'>
+			<digest></digest>
+			<description></description>
+		</method>
+
+		<method name='delete_selected_frame'>
+			<digest></digest>
+			<description></description>
+		</method>
+
 		<method name='morph_position'>
 			<digest></digest>
 			<description></description>
 		</method>
 
-		<method name='add_frame'>
-			<digest>Read from input buffer </digest>
-			<description>Read from input buffer </description>
+		<method name='set_output_gain'>
+			<digest></digest>
+			<description></description>
+		</method>
+
+		<method name='set_export_tablesize'>
+			<digest></digest>
+			<description></description>
+		</method>
+
+		<method name='export_table'>
+			<digest></digest>
+			<description></description>
 		</method>
 
 	</methodlist>
@@ -93,19 +98,9 @@
 
 	<attributelist>
 
-		<attribute name='Osc Freq' get='1' set='1' type='float64' size='1' >
-			<digest>Oscillator Frequency</digest>
-			<description>Oscillator Frequency. </description>
-		</attribute>
-
-		<attribute name='Export tablesize' get='1' set='1' type='long' size='1' >
-			<digest>Default export tablesize</digest>
-			<description>Default export tablesize. </description>
-		</attribute>
-
-		<attribute name='Input Buffer' get='1' set='1' type='symbol' size='1' >
-			<digest>Name of buffer~ to read from </digest>
-			<description>Name of buffer~ to read from </description>
+		<attribute name='Selection Color' get='1' set='1' type='float64' size='1' >
+			<digest></digest>
+			<description></description>
 		</attribute>
 
 		<attribute name='Ramp steps per wavetable' get='1' set='1' type='long' size='1' >
@@ -113,27 +108,7 @@
 			<description></description>
 		</attribute>
 
-		<attribute name='Export Buffer' get='1' set='1' type='symbol' size='1' >
-			<digest>Name of buffer~ to write to</digest>
-			<description>Name of buffer~ to write to. </description>
-		</attribute>
-
-		<attribute name='Channel' get='1' set='1' type='long' size='1' >
-			<digest>Channel to read from the buffer~</digest>
-			<description>Channel to read from the buffer~. The channel number uses 1-based counting. </description>
-		</attribute>
-
-		<attribute name='Morphed Frame Color' get='1' set='1' type='float64' size='1' >
-			<digest></digest>
-			<description></description>
-		</attribute>
-
-		<attribute name='Selection Color' get='1' set='1' type='float64' size='1' >
-			<digest></digest>
-			<description></description>
-		</attribute>
-
-		<attribute name='Draw selected waveforms fat' get='1' set='1' type='long' size='1' >
+		<attribute name='Background Color' get='1' set='1' type='float64' size='1' >
 			<digest></digest>
 			<description></description>
 		</attribute>
@@ -143,9 +118,39 @@
 			<description></description>
 		</attribute>
 
-		<attribute name='Background Color' get='1' set='1' type='float64' size='1' >
+		<attribute name='Morphed Frame Color' get='1' set='1' type='float64' size='1' >
 			<digest></digest>
 			<description></description>
+		</attribute>
+
+		<attribute name='Export Buffer' get='1' set='1' type='symbol' size='1' >
+			<digest>Name of buffer~ to write to</digest>
+			<description>Name of buffer~ to write to. </description>
+		</attribute>
+
+		<attribute name='Input Buffer' get='1' set='1' type='symbol' size='1' >
+			<digest>Name of buffer~ to read from </digest>
+			<description>Name of buffer~ to read from </description>
+		</attribute>
+
+		<attribute name='Draw selected waveforms fat' get='1' set='1' type='long' size='1' >
+			<digest></digest>
+			<description></description>
+		</attribute>
+
+		<attribute name='Channel' get='1' set='1' type='long' size='1' >
+			<digest>Channel to read from the buffer~</digest>
+			<description>Channel to read from the buffer~. The channel number uses 1-based counting. </description>
+		</attribute>
+
+		<attribute name='Export tablesize' get='1' set='1' type='long' size='1' >
+			<digest>Default export tablesize</digest>
+			<description>Default export tablesize. </description>
+		</attribute>
+
+		<attribute name='Osc Freq' get='1' set='1' type='float64' size='1' >
+			<digest>Oscillator Frequency</digest>
+			<description>Oscillator Frequency. </description>
 		</attribute>
 
 	</attributelist>

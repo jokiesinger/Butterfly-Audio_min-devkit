@@ -63,7 +63,8 @@ class StackedFrames {
     
 public:
     //Ist es in Ordnung nur diesen Konstruktor zu implementieren?
-    StackedFrames(float sampleRate, int internalTablesize, float oscFreq, int maxFrames) : maxFrames(maxFrames), internalTablesize(internalTablesize) {
+	StackedFrames(float sampleRate, int internalTablesize, float oscFreq, int maxFrames) : 
+          sampleRate(sampleRate), maxFrames(maxFrames), internalTablesize(internalTablesize) {
         audioProcessor.init(oscFreq, sampleRate, maxFrames);
         morphedWaveform.resize(internalTablesize, 0.f);
         //frames.clearSelection();        //Not the way to go
