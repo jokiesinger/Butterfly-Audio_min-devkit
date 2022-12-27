@@ -51,9 +51,9 @@ bool SamplePreprocessor::canExport() const {
 
 std::pair<int, int> SamplePreprocessor::getCurrentExportRange() const {
 	if (mode == Mode::free) {
-		return { std::round(freeSelection.first), std::round(freeSelection.second) };
+		return { static_cast<int>(std::round(freeSelection.first)), static_cast<int>(std::round(freeSelection.second)) };
 	} else if (mode == Mode::zeros) {
-		return { std::round(zerosSelection.first), std::round(zerosSelection.second) };
+		return { static_cast<int>(std::round(zerosSelection.first)), static_cast<int>(std::round(zerosSelection.second)) };
 	}
 	return {};
 }
@@ -77,7 +77,7 @@ std::optional<std::vector<double>> SamplePreprocessor::exportFrame(int targetTab
 	return std::move(data);
 }
 
-void SamplePreprocessor::draw(MaxPainter& painter, const DrawAttributes& drawAttributes) {
+void SamplePreprocessor::draw(Painter& painter, const DrawAttributes& drawAttributes) {
 	if (targetSize.x != painter.getWidth() || targetSize.y != painter.getHeight()) {
 		targetResized(painter.getWidth(), painter.getHeight());
 	}
@@ -103,7 +103,7 @@ void SamplePreprocessor::draw(MaxPainter& painter, const DrawAttributes& drawAtt
 	}
 }
 
-void SamplePreprocessor::drawSamples(MaxPainter& painter) { //Das allgemeingültig schreiben und auch bei StackedFrames verwenden!
+void SamplePreprocessor::drawSamples(Painter& painter) { //Das allgemeingültig schreiben und auch bei StackedFrames verwenden!
 	if (inputSamples.empty()) return;
 
 	// get first/last visible sample
@@ -145,7 +145,7 @@ void SamplePreprocessor::drawSamples(MaxPainter& painter) { //Das allgemeingült
 	}
 }
 
-void SamplePreprocessor::drawDraggingRect(MaxPainter& painter) {
+void SamplePreprocessor::drawDraggingRect(Painter& painter) {
 	if (dragging && button == MouseEvent::Button::Right) {
 		Rect rect = { currentMousePoint, mouseDownPoint };
 		rect.y = margin;
@@ -158,7 +158,7 @@ void SamplePreprocessor::drawDraggingRect(MaxPainter& painter) {
 	}
 }
 
-void SamplePreprocessor::drawZeroCrossings(MaxPainter& painter) {
+void SamplePreprocessor::drawZeroCrossings(Painter& painter) {
 	// get first/last visible sample
 	const int first = std::max(0., transform.fromX(0) - 1.);
 	const int last = std::min<double>(inputSamples.size(), std::ceil(transform.fromX(targetSize.x) + 1.));
@@ -174,11 +174,18 @@ void SamplePreprocessor::drawZeroCrossings(MaxPainter& painter) {
 	}
 }
 
-void SamplePreprocessor::drawOverlayRects(MaxPainter& painter) {
+void SamplePreprocessor::drawOverlayRects(Painter& painter) {
 	if (mode == Mode::free) {
 		if (freeSelection.first == freeSelection.second)
 			return;
-		const auto r = transform.apply({ { freeSelection.first, 1 }, { freeSelection.second, -1 } });
+		auto r = transform.apply({ { freeSelection.first, 1 }, { freeSelection.second, -1 } });
+		// prevent huge rects to be drawn which isnt handled well by jgraphics
+		r.width = std::min(r.x + r.width, painter.getWidth()) - r.x;
+		const auto newX1 = std::max(r.x, -1.0);
+		const auto newX2 = std::min(r.x + r.width, painter.getWidth() + 1.0);
+		r.x = newX1;
+		r.width = std::max(newX2 - newX1, 0.01);
+
 		painter.rect(r);
 	} else if (mode == Mode::zeros) {
 		if (zerosSelection.first == zerosSelection.second)

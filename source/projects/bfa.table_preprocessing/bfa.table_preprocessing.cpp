@@ -5,7 +5,8 @@
 
 #include "c74_min.h"
 #include "sample_preprocessor.h"
-#include "sample_preprocessor.cpp" // cannot include c74_min.h in more than one translation unit
+#include "min_painter.h"
+#include "min_event_wrapper.h"
 
 
 using namespace c74::min;
