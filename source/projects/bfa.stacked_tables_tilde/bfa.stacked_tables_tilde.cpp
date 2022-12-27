@@ -8,11 +8,16 @@
 
 #include "antialiase.h"
 #include "waveform_processing.h"
-#include "wavetable_oscillator.h"
+//#include "wavetable_oscillator.h"
 #include "ramped_value.h"
 
+#include "stacked_frames.h"
 
-#include "stacked_tables_helper_functions.h"
+/*
+#define INTERNAL_TABLESIZE 2048
+#define MAX_FRAMES 16
+inline constexpr int internalTablesize = 2048;
+*/
 
 //using namespace Butterfly;
 using namespace c74::min;
@@ -22,22 +27,21 @@ class stacked_tables_tilde : public object<stacked_tables_tilde>, public vector_
 {
 private:
     int nIntervalls;
-    float spacing;
-    float yScaling;
-    float yOffset;
-    float margin{10.f};
+    float spacing, yScaling, yOffset;
+    float margin{10.f};                             //As attribute?
     
     float sampleRate{48000.f};
 
-    static constexpr int internalTablesize{2048};   //Die wollen wir nicht ändern
-    static constexpr int maxFrames{16};
+    static constexpr int internalTablesize{2048};   //Die wollen wir nicht ändern. Als Konstante außerhalb der Klasse definieren?
+    static constexpr int maxFrames{16};             //Die wollen wir nicht ändern. Als Konstante außerhalb der Klasse definieren?
     
     std::vector<float> splitFreqs;
     const Butterfly::FFTCalculator<float, internalTablesize> fftCalculator;
     
-    MultiFrameOsc multiFrameOsc;
+    Butterfly::StackedFrames stackedFrames;
 
-    Butterfly::RampedValue<float> outputGain{1.f, 150};
+    //Butterfly::RampedValue<float> outputGain{1.f, 15000}; -> fine to do in Max!
+
     
 public:
     MIN_DESCRIPTION     { "Display and edit stacked frames." };
@@ -68,6 +72,7 @@ public:
     attribute<color> selection_color {this, "Selection Color", {.8f, .8f, .8f, .8f}};
     attribute<color> morphed_frame_color {this, "Morphed Frame Color", {1.f, 1.f, 1.f, 1.f}};
     attribute<bool> use_fat_lines_for_selection {this, "Draw selected waveforms fat", false};
+    attribute<int> rampSteps {this, "Ramp steps per wavetable", 15000};
     
     attribute<int, threadsafe::no, limit::clamp> m_channel {
         this, "Channel", 1,
@@ -82,30 +87,26 @@ public:
     attribute<symbol> input_buffer_name {
         this, "Input Buffer", "targetBuffer", description{"Name of buffer~ to read from"}
     };
-  
-    //Static for now
-//    attribute<int> maxFrames
-//    {
-//        this, "Max stacked Frames", 16, description{"Maximum number of possible stacked frames. Has to match number of stacked_frames_buffer channels."}
-//    };
     
     attribute<int> export_tablesize {
         this, "Export tablesize", 1048, description{"Default export tablesize."}
     };
     
+    //Attribute könnte man threadsafe=yes setzen und sich vrmtl. die Queue sparen
     attribute<double> oscillatorFreq {
         this, "Osc Freq", 77.78, description{"Oscillator Frequency."}
     };
          
 
-    stacked_tables_tilde(const atoms& args = {}) : ui_operator::ui_operator {this, args}, multiFrameOsc{sampleRate, internalTablesize, static_cast<float>(oscillatorFreq.get()), maxFrames} {
-        nIntervalls = calculateSplitFreqs(splitFreqs);
+    stacked_tables_tilde(const atoms& args = {}) : ui_operator::ui_operator {this, args}, stackedFrames{sampleRate, internalTablesize, static_cast<float>(oscillatorFreq.get()), maxFrames} {
+        splitFreqs = Butterfly::calculateSplitFreqs(2.f, sampleRate / 2.f, 5.f);
+        nIntervalls = splitFreqs.size();
     }
     
     message<> dspsetup {
         this, "dspsetup", MIN_FUNCTION {
             sampleRate = static_cast<float>(args[0]);
-            multiFrameOsc.Osc.setSampleRate(sampleRate);
+            stackedFrames.setSampleRate(sampleRate);
             cout << "dspsetup happend" << endl;
             return {};
         }
@@ -113,7 +114,6 @@ public:
     
     message<> add_frame {
         this, "add_frame", "Read from input buffer", MIN_FUNCTION {
-            //Read from buffer
             input_buffer.set(input_buffer_name);
             buffer_lock<false> buf(input_buffer);
             auto chan = std::min<size_t>(m_channel - 1, buf.channel_count());
@@ -127,52 +127,25 @@ public:
                 return{};
             }
             std::vector<float> data;
-            for (auto i = 0; i < buf.frame_count(); i++){         //Get samples
+            for (auto i = 0; i < buf.frame_count(); i++){
                 data.push_back(buf.lookup(i, chan));
             }
             
-            if (multiFrameOsc.addFrame(data, sampleRate, splitFreqs, fftCalculator)){
+            if (stackedFrames.addFrame(data, sampleRate, splitFreqs, fftCalculator)){
                 cout << "Frame succesfully added.\n";
             } else {
-                cout << "Max frame count reached." << endl;
-                message_out.send("Max frame count reached");    //Das dem Nutzer prompten
+                message_out.send("userPromt", "Max frame count reached");    //Das dem Nutzer prompten
             }
             notifyStackedTablesStatus();
             redraw();
             buf.dirty();
-            buf.~buffer_lock();
             return{};
         }
     };
     
     message<> flip_phase {
         this, "flip_phase", MIN_FUNCTION {
-            multiFrameOsc.stackedFrames.flipPhase();
-            multiFrameOsc.updateMorphingSamples();
-            redraw();
-            return{};
-        }
-    };
-    
-    message<> move_up_selected_frame {
-        this, "move_up_selected_frame", MIN_FUNCTION {
-            if (!multiFrameOsc.stackedFrames.moveUpSelectedFrame()) {
-                cout << "Can't move up selected frame.\n";
-            } else {
-                multiFrameOsc.calculateIds();
-            }
-            redraw();
-            return {};
-        }
-    };
-
-    message<> move_down_selected_frame {
-        this, "move_down_selected_frame", MIN_FUNCTION {
-            if (!multiFrameOsc.stackedFrames.moveDownSelectedFrame()) {
-                cout << "Can't move down selected frame.\n";
-            } else {
-                multiFrameOsc.calculateIds();
-            }
+            stackedFrames.flipPhase();
             redraw();
             return{};
         }
@@ -180,23 +153,31 @@ public:
     
     message<> normalize_frame {
         this, "normalize_frame", MIN_FUNCTION {
-            if (!multiFrameOsc.stackedFrames.normalizeFrame()) {
-                cout << "Can't normalize selected frame." << endl;
-            } else {
-                multiFrameOsc.updateMorphingSamples();
-            }
+            stackedFrames.normalize();
+            redraw();
+            return{};
+        }
+    };
+    
+    message<> move_up_selected_frame {
+        this, "move_up_selected_frame", MIN_FUNCTION {
+            stackedFrames.moveDownSelectedFrame();      //Not a bug!
+            redraw();
+            return {};
+        }
+    };
+
+    message<> move_down_selected_frame {
+        this, "move_down_selected_frame", MIN_FUNCTION {
+            stackedFrames.moveUpSelectedFrame();
             redraw();
             return{};
         }
     };
     
     message<> delete_selected_frame {
-        this, "delete_selected_frame", MIN_FUNCTION {
-            if (!multiFrameOsc.stackedFrames.removeSelectedFrame()) {
-                cout << "No frame to delete.\n";
-            } else {
-                multiFrameOsc.calculateIds();
-            }
+		this, "delete_selected_frame", MIN_FUNCTION {
+            stackedFrames.removeSelectedFrame();
             notifyStackedTablesStatus();
             redraw();
             return {};
@@ -205,7 +186,8 @@ public:
     
     message<> clear_all {
         this, "clear_all", MIN_FUNCTION {
-            multiFrameOsc = {sampleRate, internalTablesize, static_cast<float>(oscillatorFreq.get()), maxFrames};
+            //stackedFrames = {sampleRate, internalTablesize, static_cast<float>(oscillatorFreq.get()), maxFrames};
+            stackedFrames.clearAll();
             notifyStackedTablesStatus();
             redraw();
             return{};
@@ -218,16 +200,16 @@ public:
             auto mouse_y = e.y();
             ///TODO: spacing Berechnung und Verwendung überprüfen
             int y_click = floor(mouse_y / (spacing + 1.f));
-            multiFrameOsc.stackedFrames.selectFrame(y_click);
+            stackedFrames.selectFrame(y_click);
             redraw();
-            cout << "Selected Frame: " << y_click << endl;
+            //cout << "Selected Frame: " << y_click << endl;
             return{};
         }
     };
     
     message<> morph_position {
         this, "morph_position", MIN_FUNCTION {
-            multiFrameOsc.setPos(std::clamp(static_cast<float>(args[0]), 0.f, 1.f));
+            stackedFrames.setNormalizedMorphPos(static_cast<float>(args[0]));
             redraw();
             return{};
         }
@@ -236,14 +218,14 @@ public:
     message<> set_freq {
         this, "set_freq", MIN_FUNCTION {
             oscillatorFreq = std::clamp(static_cast<double>(args[0]), 1., static_cast<double>(sampleRate) / 2.);
-            multiFrameOsc.Osc.setFrequency(oscillatorFreq.get());
+            stackedFrames.setOscFreq(oscillatorFreq.get());
             return{};
         }
     };
     
     message<> set_output_gain {
         this, "set_output_gain", MIN_FUNCTION {
-            outputGain.set(std::clamp(static_cast<float>(args[0]), 0.f, 1.f));
+            stackedFrames.setOscGain(std::clamp(static_cast<double>(args[0]), 0., 1.));
             return{};
         }
     };
@@ -257,113 +239,111 @@ public:
     
     message<> export_table {
         this, "export_table", MIN_FUNCTION {
-            std::vector<float> stackedTable;
-            if (!multiFrameOsc.stackedFrames.getStackedTable(stackedTable, export_tablesize.get(), sampleRate)) {
-                cout << "No table to export.\n";
-                //message_out("export_buffer_length", export_tablesize.get());  //This would make export of zero table possible
-                //message_out("exporting_done");
-                return{};
-            }
-            message_out("export_buffer_length", stackedTable.size());    //set buffer~ size
-            output_buffer.set(output_buffer_name);
-            buffer_lock<false> buf(output_buffer);      //false: not accessing via audio thread
-            
-            if (buf.channel_count() > 1) {
-                cout << "Output buffer has more than one channel (has to be one).\n";
-                return{};
-            }
-            if (buf.valid()) {
-                for (int i = 0; i < buf.frame_count(); i++) {
-                    buf[i] = stackedTable[i];
+            if (auto concatenatedFrames = stackedFrames.getConcatenatedFrames(export_tablesize.get())) {
+                message_out("export_buffer_length", concatenatedFrames->size());    //set outbut buffer~ size in Max
+                output_buffer.set(output_buffer_name);
+                buffer_lock<false> buf(output_buffer);      //false: not accessing via audio thread
+                if (buf.valid()) {
+                    for (int i = 0; i < buf.frame_count(); i++) {
+                        buf[i] = concatenatedFrames->at(i);
+                    }
+                    message_out("exporting_done");
+                } else {
+                    message_out("debug", "Output bufer not valid.");
                 }
-                message_out("exporting_done");
+                buf.dirty();
+            } else {
+                message_out("userPromt", "No Wavetable to export.\n");
             }
-            buf.dirty();
-            buf.~buffer_lock();
             return{};
         }
     };
     
+    //Relevant for UI activation states
     void notifyStackedTablesStatus() {
-        if (multiFrameOsc.stackedFrames.frames.size() == 0) {
+        size_t numFrames = stackedFrames.getNumFrames();
+        if (numFrames == 0) {
             message_out.send("stackedTablesState", 0);
-        } else if (multiFrameOsc.stackedFrames.frames.size() == 1) {
+        } else if (numFrames == 1) {
             message_out.send("stackedTablesState", 1);
-        } else if (multiFrameOsc.stackedFrames.frames.size() > 1) {
+        } else if (numFrames > 1) {
             message_out.send("stackedTablesState", 2);
         }
     }
     
-    ///-----GRAPHICS-----
+    ///==============
+    ///   GRAPHICS
+    ///==============
     message<> paint {
         this, "paint", MIN_FUNCTION {
             target t {args};
             float height = t.height() - margin;
             float width = t.width() - margin;
-            int nActiveFrames = multiFrameOsc.stackedFrames.frames.size();
+            size_t nActiveFrames = stackedFrames.getNumFrames();
             spacing = height / static_cast<float>(nActiveFrames);
             yScaling = ((height - 10.f) / 2.f) / static_cast<float>(nActiveFrames);
             
-            rect<fill> {              //Background
-                t,
-                color {background_color}
-            };
-            for (int i = 0; i < nActiveFrames; i++) { drawStackedFrames(i, t); }
-            draw_morphable_frame(t);
+            rect<fill> { t, color {background_color} };     //Draw background
+            for (int i = 0; i < nActiveFrames; i++) { drawStackedFrames(i, t); }    //Draw frames
+            draw_morphable_frame(t);    //Draw morphable frame
             
             return {};
         }
     };
-     
-    void drawStackedFrames(int f, target t) {
-        yOffset = (spacing * static_cast<float>(f)) + (spacing / 2.f) + (margin / 2.f);
-        float stroke_width = 1.f;
-        //if (multiFrameOsc.stackedFrames.frames[f].isSelected){stroke_width = 1.5f;};
-        float origin_x = margin / 2.f;
-        float origin_y = (multiFrameOsc.stackedFrames.frames[f].samples[0] * yScaling * -1.f) + yOffset;
-        float position = 0.f;
-        float width = t.width() - margin;
-        float frac     = static_cast<float>(internalTablesize) / width;
-        if (multiFrameOsc.stackedFrames.frames[f].isSelected) { 
-             if (use_fat_lines_for_selection) {
-                  stroke_width = 1.5f;
-             } else {
-                  rect<fill> r{t, color {selection_color}, origin {margin / 2., yOffset-yScaling}, size {width, 2 * yScaling}};
-             }
+    
+    ///TODO: Could be refactored
+    void drawStackedFrames(int frameIdx, target t) {
+        if (auto frameSamples = stackedFrames.getFrame(frameIdx)) {
+            yOffset = (spacing * static_cast<float>(frameIdx)) + (spacing / 2.f) + (margin / 2.f);
+            float stroke_width = 1.f;
+            float origin_x = margin / 2.f;
+            float origin_y = (frameSamples->at(0) * yScaling * -1.f) + yOffset;
+            float position = 0.f;
+            float width = t.width() - margin;
+            float frac     = static_cast<float>(internalTablesize) / width;
+            auto selectedIdx = stackedFrames.getSelectedFrameIdx();
+            if (selectedIdx && frameIdx == selectedIdx) {
+                 if (use_fat_lines_for_selection) {
+                      stroke_width = 1.5f;
+                 } else {
+                      rect<fill> r{t, color {selection_color}, origin {margin / 2., yOffset-yScaling}, size {width, 2 * yScaling}};
+                 }
+            }
+            lib::interpolator::linear<> linear_interpolation;
+            for (int i = 0; i < width; i++) {
+                int lower_index = floor(position);
+                int upper_index = ceil(position);
+                upper_index = upper_index > (internalTablesize - 1) ? (internalTablesize - 1) : upper_index;
+                float delta = position - static_cast<float>(lower_index);
+                float interpolated_value = linear_interpolation.operator()(frameSamples->at(lower_index), frameSamples->at(upper_index), delta);
+                float y = (interpolated_value * yScaling * -1.f) + yOffset;
+                int x = i + static_cast<int>(margin / 2.f);
+                line<stroke> {
+                    t,
+                    color{frame_color},
+                    origin{origin_x, origin_y},
+                    destination{x, y},
+                    line_width{stroke_width}
+                };
+                position += frac;
+                origin_x = x;
+                origin_y = y;
+            }
         }
-        lib::interpolator::linear<> linear_interpolation;
-        for (int i = 0; i < width; i++) {
-            int lower_index = floor(position);
-            int upper_index = ceil(position);
-            upper_index = upper_index > (internalTablesize - 1) ? (internalTablesize - 1) : upper_index;
-            float delta = position - static_cast<float>(lower_index);
-            float interpolated_value = linear_interpolation.operator()(multiFrameOsc.stackedFrames.frames[f].samples[lower_index], multiFrameOsc.stackedFrames.frames[f].samples[upper_index], delta);
-            float y = (interpolated_value * yScaling * -1.f) + yOffset;
-            int x = i + static_cast<int>(margin / 2.f);
-            line<stroke> {
-                t,
-                color{frame_color},
-                origin{origin_x, origin_y},
-                destination{x, y},
-                line_width{stroke_width}
-            };
-            position += frac;
-            origin_x = x;
-            origin_y = y;
-        }
+        
     }
     
     float updateMorphFrameYOffset(target t) {
         float yOffset = (spacing / 2.f) + (margin / 2.f);
-        float morphFrameYOffset = multiFrameOsc.pos * (t.height() - (yOffset * 2.f));
+        float morphFrameYOffset = stackedFrames.getNormalizedMorphPos() * (t.height() - (yOffset * 2.f));
         return morphFrameYOffset + yOffset;
     }
     
     void draw_morphable_frame(target t) {
-        if (multiFrameOsc.isVisible) {
+        if (auto morphedWaveform = stackedFrames.getMorphedWaveformSamples()) {
             float morphFrameYOffset = updateMorphFrameYOffset(t);
             float origin_x = 0.f + (margin / 2.f);
-            float origin_y = (multiFrameOsc.morphingSamples[0] * yScaling * -1.f) + morphFrameYOffset;
+            float origin_y = (morphedWaveform->at(0) * yScaling * -1.f) + morphFrameYOffset;
             float position = 0.f;
             float width = t.width() - margin;
             float frac = static_cast<float>(internalTablesize) / width;
@@ -373,7 +353,7 @@ public:
                 int upper_index = ceil(position);
                 upper_index = upper_index > (internalTablesize - 1) ? (internalTablesize - 1) : upper_index;
                 float delta = position - static_cast<float>(lower_index);
-                float interpolated_value = linear_interpolation.operator()(multiFrameOsc.morphingSamples[lower_index], multiFrameOsc.morphingSamples[upper_index], delta);
+                float interpolated_value = linear_interpolation.operator()(morphedWaveform->at(lower_index), morphedWaveform->at(upper_index), delta);
                 float y = (interpolated_value * yScaling * -1.f) + morphFrameYOffset;
                 int x = i + static_cast<int>(margin / 2.f);
                 line<stroke> {
@@ -390,14 +370,12 @@ public:
         }
     }
     
+    ///==============
+    ///   AUDIO
+    ///==============
     void operator()(audio_bundle input, audio_bundle output)
     {
-        auto in  = input.samples(0);
-        auto out = output.samples(0);
-
-        for (auto i = 0; i < input.frame_count(); ++i) {
-            out[i] = ++multiFrameOsc * outputGain++;
-        }
+        stackedFrames.process(output);
     }
 };
 
