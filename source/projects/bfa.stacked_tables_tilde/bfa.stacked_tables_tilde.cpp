@@ -6,10 +6,7 @@
 
 #include "c74_min.h"
 
-#include "antialiase.h"
 #include "waveform_processing.h"
-//#include "wavetable_oscillator.h"
-#include "ramped_value.h"
 
 #include "stacked_frames.h"
 

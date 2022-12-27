@@ -37,9 +37,9 @@
 			<description></description>
 		</method>
 
-		<method name='mousedrag'>
-			<digest></digest>
-			<description></description>
+		<method name='setMode'>
+			<digest>Set frame selection mode (custom, period)</digest>
+			<description>Set frame selection mode (custom, period). </description>
 		</method>
 
 		<method name='sampleDropped'>
@@ -47,9 +47,9 @@
 			<description>Read again from the buffer~. </description>
 		</method>
 
-		<method name='setMode'>
-			<digest>Set frame selection mode (custom, period)</digest>
-			<description>Set frame selection mode (custom, period). </description>
+		<method name='mousedrag'>
+			<digest></digest>
+			<description></description>
 		</method>
 
 	</methodlist>
@@ -59,7 +59,42 @@
 
 	<attributelist>
 
+		<attribute name='Color Background' get='1' set='1' type='float64' size='1' >
+			<digest></digest>
+			<description></description>
+		</attribute>
+
+		<attribute name='Color Waveform ' get='1' set='1' type='float64' size='1' >
+			<digest></digest>
+			<description></description>
+		</attribute>
+
+		<attribute name='Color Zero Crossings' get='1' set='1' type='float64' size='1' >
+			<digest></digest>
+			<description></description>
+		</attribute>
+
+		<attribute name='Color Overlay' get='1' set='1' type='float64' size='1' >
+			<digest></digest>
+			<description></description>
+		</attribute>
+
+		<attribute name='Stroke Width Selected Samples' get='1' set='1' type='float64' size='1' >
+			<digest></digest>
+			<description></description>
+		</attribute>
+
 		<attribute name='Mouse wheel zoom speed' get='1' set='1' type='float64' size='1' >
+			<digest></digest>
+			<description></description>
+		</attribute>
+
+		<attribute name='Color of rectangle that is shown when drag-zooming into the sample' get='1' set='1' type='float64' size='1' >
+			<digest></digest>
+			<description></description>
+		</attribute>
+
+		<attribute name='Stroke Width Samples' get='1' set='1' type='float64' size='1' >
 			<digest></digest>
 			<description></description>
 		</attribute>
@@ -74,47 +109,12 @@
 			<description>Name of buffer~ to write to </description>
 		</attribute>
 
-		<attribute name='Stroke Width Samples' get='1' set='1' type='float64' size='1' >
-			<digest></digest>
-			<description></description>
-		</attribute>
-
-		<attribute name='Stroke Width Selected Samples' get='1' set='1' type='float64' size='1' >
-			<digest></digest>
-			<description></description>
-		</attribute>
-
-		<attribute name='Color Zero Crossings' get='1' set='1' type='float64' size='1' >
-			<digest></digest>
-			<description></description>
-		</attribute>
-
 		<attribute name='Waveform Y Scaling Factor' get='1' set='1' type='float64' size='1' >
 			<digest></digest>
 			<description></description>
 		</attribute>
 
-		<attribute name='Color of rectangle that is shown when drag-zooming into the sample' get='1' set='1' type='float64' size='1' >
-			<digest></digest>
-			<description></description>
-		</attribute>
-
-		<attribute name='Color Overlay' get='1' set='1' type='float64' size='1' >
-			<digest></digest>
-			<description></description>
-		</attribute>
-
-		<attribute name='Color Waveform ' get='1' set='1' type='float64' size='1' >
-			<digest></digest>
-			<description></description>
-		</attribute>
-
 		<attribute name='Mouse wheel zoom speed (applied when Ctrl is down)' get='1' set='1' type='float64' size='1' >
-			<digest></digest>
-			<description></description>
-		</attribute>
-
-		<attribute name='Color Background' get='1' set='1' type='float64' size='1' >
 			<digest></digest>
 			<description></description>
 		</attribute>
