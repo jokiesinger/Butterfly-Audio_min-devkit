@@ -19,7 +19,8 @@ include_directories(
 
 set( SOURCE_FILES
 	${PROJECT_NAME}.cpp
-	table_preprocessing_helper_functions.h
+	sample_preprocessor.cpp
+	sample_preprocessor.h
 	graphics_transform.h
 )
 
@@ -50,3 +51,17 @@ set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD_REQUIRED True)
 #############################################################
 
 include(${C74_MIN_API_DIR}/test/min-object-unittest.cmake)
+target_link_libraries(
+		${PROJECT_NAME}_test
+	PRIVATE
+		wave
+		synth
+		math
+		utilities
+)	
+set_target_properties(${PROJECT_NAME}_test PROPERTIES CXX_STANDARD 20)
+set_target_properties(${PROJECT_NAME}_test PROPERTIES CXX_STANDARD_REQUIRED True)
+target_link_libraries(${PROJECT_NAME}_test PUBLIC ${MaxAPI_LIB})
+target_link_libraries(${PROJECT_NAME}_test PUBLIC ${MaxAudio_LIB})
+#target_link_libraries(${PROJECT_NAME}_test PUBLIC ${Jitter_LIB})
+
