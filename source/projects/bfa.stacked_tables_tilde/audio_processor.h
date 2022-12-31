@@ -6,7 +6,7 @@
 namespace Butterfly {
 
 enum class ParameterType {
-    gain, frequency, morphPos, sampleRate
+    gain, frequency, morphPos, sampleRate, rampSteps
 };
 
 struct Event {
@@ -92,6 +92,9 @@ private:
             case ParameterType::sampleRate:
                 setSampleRate(event.value);
                 break;
+            case ParameterType::rampSteps:
+                setRampSteps(event.value);
+                break;
         }
     }
     
@@ -110,6 +113,10 @@ private:
     
     void setSampleRate(double sampleRate) {
         osc.setSampleRate(sampleRate);
+    }
+    
+    void setRampSteps(double rampSteps) {
+        osc.setRampingStepsPerWavetable(static_cast<int>(rampSteps));
     }
 
     
