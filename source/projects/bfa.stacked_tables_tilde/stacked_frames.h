@@ -64,165 +64,164 @@ class StackedFrames
 	using Osc = Butterfly::WavetableOscillator<Wavetable>;
 
 public:
-    //Ist es in Ordnung nur diesen Konstruktor zu implementieren?
-	StackedFrames(float sampleRate, int internalTablesize, float oscFreq, int maxFrames) : 
-          sampleRate(sampleRate), maxFrames(maxFrames), internalTablesize(internalTablesize) {
-        audioProcessor.init(oscFreq, sampleRate, maxFrames);
-        morphedWaveform.resize(internalTablesize, 0.f);
-        //frames.clearSelection();        //Not the way to go
-    }
-    
-    template<int internalTablesize>
-    bool addFrame(const std::vector<float>& data, float sampleRate, const std::vector<float>& splitFreqs,
-                  const Butterfly::FFTCalculator<float, internalTablesize>& fftCalculator) {
-        if (frames.size() >= maxFrames) { return false; }
-        frames.add(createFrame(data, sampleRate, splitFreqs, fftCalculator));
-        frames.select(frames.size() - 1);
-        framesChanged();
-        return true;
-    }
-    
-    void flipPhase() {
-        if (auto idx = frames.getSelectionIndex()) {
-            for (float& sample : frames.at(*idx).samples) {
-                sample *= -1.f;
-            }
-            for (auto& wavetable : frames.at(*idx).multitable) {
-                wavetable *= -1.f;
-            }
-            framesChanged();
-        }
-    }
-    
-    void normalize() {
-        if (auto idx = frames.getSelectionIndex()) {
-            //Get peak out of raw data (same normalization value for all tables in multitable)
-            const auto inv = minusOneDb / Butterfly::peak(frames.at(*idx).samples.begin(), frames.at(*idx).samples.end());
-            for (float& sample : frames.at(*idx).samples) {
-                sample *= inv;
-            }
-            for (auto& wavetable : frames.at(*idx).multitable) {
-                wavetable *= inv;
-            }
-            framesChanged();
-        }
-    }
-    
-    void moveUpSelectedFrame() {
-        if (auto idx = frames.getSelectionIndex()) {
-            if (idx < frames.size() - 1) {
-                frames.moveUp(*idx, 1);
-                frames.select(*idx + 1);
-                framesChanged();
-            }
-        }
-    }
-    
-    void moveDownSelectedFrame() {
-        if (auto idx = frames.getSelectionIndex()) {
-            if (idx > 0) {
-                frames.moveDown(*idx, 1);
-                frames.select(*idx - 1);
-                framesChanged();
-            }
-        }
-    }
-    
-    void removeSelectedFrame() {
-        if (auto idx = frames.getSelectionIndex()) {
-            frames.remove(*idx);
-            framesChanged();
-        }
-    }
-    
-    void clearAll() {
-        frames.clear();
-        framesChanged();
-    }
-    
-    void selectFrame(size_t idx) {
-        if (idx >= frames.size()) { return; }
-        //frames.clearSelection();      //redundant atm
-        frames.select(idx);
-    }
-    
-    std::optional<size_t> getSelectedFrameIdx() {
-        return frames.getSelectionIndex();
-    }
-    
-    std::optional<std::vector<float>> getConcatenatedFrames(int exportTablesize) {
-        if (frames.empty()) { return {}; }
-        //Objects for interpolation & concatenation
-        std::vector<float> concatenatedFrames{};
-        Osc interpolationOsc{};
-        double exportTableOscFreq = sampleRate / static_cast<float>(exportTablesize);
-        
-        for (const auto& frame : frames) {
-            Wavetable wavetable {frame.samples, sampleRate / 2.f};
-            std::span<Wavetable> wavetableSpan {&wavetable, 1};
-            std::vector<float> interpolatedWavetable{};
-            interpolationOsc.setTable(&wavetableSpan);
-            interpolationOsc.setSampleRate(sampleRate);
-            interpolationOsc.setFrequency(exportTableOscFreq);
-            for (int i = 0; i < exportTablesize; ++i) {
-                interpolatedWavetable.push_back(interpolationOsc++);
-            }
-            concatenatedFrames.insert(concatenatedFrames.end(), interpolatedWavetable.begin(), interpolatedWavetable.end());
-        }
-        return concatenatedFrames;
-    }
-    
-    size_t getNumFrames() {
-        return frames.size();
-    }
-    
-    std::optional<std::vector<float>> getFrame(size_t idx) {
-        if (idx >= frames.size()) { return{}; }
-        return frames.at(idx).samples;
-    }
-    
-    float getNormalizedMorphPos() { return normalizedMorphPos; }
-    
-    bool isMorphedWaveformAvailable() const {
-        return (frames.size() > 1) && (!morphedWaveform.empty());
-    }
-    
-    std::optional<std::vector<float>> getMorphedWaveformSamples() {
-        if (!isMorphedWaveformAvailable()) { return {}; }
-        return morphedWaveform;
-    }
-    
-    //=====================================
-    //               AUDIO
-    //=====================================
-    // Audio thread only!
-    void process(c74::min::audio_bundle &buffer) {
-        audioProcessor.process(buffer);
-    }
-    
-    void setSampleRate(float sampleRate) {
-        this->sampleRate = sampleRate;
-        audioProcessor.addParamEvent({ParameterType::sampleRate, sampleRate});
-    }
-    
-    void setNormalizedMorphPos(float morphPos) {
-        normalizedMorphPos = std::clamp(morphPos, 0.f, 1.f);
-        updateMorphedWaveform();
-        audioProcessor.addParamEvent({ParameterType::morphPos, normalizedMorphPos});
-    }
-    
-    void setOscFreq(double oscFreq) {
-        audioProcessor.addParamEvent({ParameterType::frequency, std::clamp(oscFreq, 1., sampleRate / 2.)});
-    }
-    
-    void setOscGain(double gain) {
-        audioProcessor.addParamEvent({ParameterType::gain, std::clamp(gain, 0., 1.)});
-    }
-    
-    void setRampingStepsPerWavetable(int rampSteps) {
-        audioProcessor.addParamEvent({ParameterType::rampSteps, static_cast<double>(std::clamp(rampSteps, 1, static_cast<int>(sampleRate)))});
-    }
-    
+	//Ist es in Ordnung nur diesen Konstruktor zu implementieren?
+	StackedFrames(float sampleRate, int internalTablesize, float oscFreq, int maxFrames) : sampleRate(sampleRate), maxFrames(maxFrames), internalTablesize(internalTablesize) {
+		audioProcessor.init(oscFreq, sampleRate, maxFrames);
+		morphedWaveform.resize(internalTablesize, 0.f);
+		//frames.clearSelection();        //Not the way to go
+	}
+
+	template<int internalTablesize>
+	bool addFrame(const std::vector<float>& data, float sampleRate, const std::vector<float>& splitFreqs,
+		const Butterfly::FFTCalculator<float, internalTablesize>& fftCalculator) {
+		if (frames.size() >= maxFrames) { return false; }
+		frames.add(createFrame(data, sampleRate, splitFreqs, fftCalculator));
+		frames.select(frames.size() - 1);
+		framesChanged();
+		return true;
+	}
+
+	void flipPhase() {
+		if (auto idx = frames.getSelectionIndex()) {
+			for (float& sample : frames.at(*idx).samples) {
+				sample *= -1.f;
+			}
+			for (auto& wavetable : frames.at(*idx).multitable) {
+				wavetable *= -1.f;
+			}
+			framesChanged();
+		}
+	}
+
+	void normalize() {
+		if (auto idx = frames.getSelectionIndex()) {
+			//Get peak out of raw data (same normalization value for all tables in multitable)
+			const auto inv = minusOneDb / Butterfly::peak(frames.at(*idx).samples.begin(), frames.at(*idx).samples.end());
+			for (float& sample : frames.at(*idx).samples) {
+				sample *= inv;
+			}
+			for (auto& wavetable : frames.at(*idx).multitable) {
+				wavetable *= inv;
+			}
+			framesChanged();
+		}
+	}
+
+	void moveUpSelectedFrame() {
+		if (auto idx = frames.getSelectionIndex()) {
+			if (idx < frames.size() - 1) {
+				frames.moveUp(*idx, 1);
+				frames.select(*idx + 1);
+				framesChanged();
+			}
+		}
+	}
+
+	void moveDownSelectedFrame() {
+		if (auto idx = frames.getSelectionIndex()) {
+			if (idx > 0) {
+				frames.moveDown(*idx, 1);
+				frames.select(*idx - 1);
+				framesChanged();
+			}
+		}
+	}
+
+	void removeSelectedFrame() {
+		if (auto idx = frames.getSelectionIndex()) {
+			frames.remove(*idx);
+			framesChanged();
+		}
+	}
+
+	void clearAll() {
+		frames.clear();
+		framesChanged();
+	}
+
+	void selectFrame(size_t idx) {
+		if (idx >= frames.size()) { return; }
+		//frames.clearSelection();      //redundant atm
+		frames.select(idx);
+	}
+
+	std::optional<size_t> getSelectedFrameIdx() {
+		return frames.getSelectionIndex();
+	}
+
+	std::optional<std::vector<float>> getConcatenatedFrames(int exportTablesize) {
+		if (frames.empty()) { return {}; }
+		//Objects for interpolation & concatenation
+		std::vector<float> concatenatedFrames{};
+		Osc interpolationOsc{};
+		double exportTableOscFreq = sampleRate / static_cast<float>(exportTablesize);
+
+		for (const auto& frame : frames) {
+			Wavetable wavetable{ frame.samples, sampleRate / 2.f };
+			std::span<Wavetable> wavetableSpan{ &wavetable, 1 };
+			std::vector<float> interpolatedWavetable{};
+			interpolationOsc.setTable(&wavetableSpan);
+			interpolationOsc.setSampleRate(sampleRate);
+			interpolationOsc.setFrequency(exportTableOscFreq);
+			for (int i = 0; i < exportTablesize; ++i) {
+				interpolatedWavetable.push_back(interpolationOsc++);
+			}
+			concatenatedFrames.insert(concatenatedFrames.end(), interpolatedWavetable.begin(), interpolatedWavetable.end());
+		}
+		return concatenatedFrames;
+	}
+
+	size_t getNumFrames() {
+		return frames.size();
+	}
+
+	std::optional<std::vector<float>> getFrame(size_t idx) {
+		if (idx >= frames.size()) { return {}; }
+		return frames.at(idx).samples;
+	}
+
+	float getNormalizedMorphPos() { return normalizedMorphPos; }
+
+	bool isMorphedWaveformAvailable() const {
+		return (frames.size() > 1) && (!morphedWaveform.empty());
+	}
+
+	std::optional<std::vector<float>> getMorphedWaveformSamples() {
+		if (!isMorphedWaveformAvailable()) { return {}; }
+		return morphedWaveform;
+	}
+
+	//=====================================
+	//               AUDIO
+	//=====================================
+	// Audio thread only!
+	void process(c74::min::audio_bundle& buffer) {
+		audioProcessor.process(buffer);
+	}
+
+	void setSampleRate(float sampleRate) {
+		this->sampleRate = sampleRate;
+		audioProcessor.addParamEvent({ ParameterType::sampleRate, sampleRate });
+	}
+
+	void setNormalizedMorphPos(float morphPos) {
+		normalizedMorphPos = std::clamp(morphPos, 0.f, 1.f);
+		updateMorphedWaveform();
+		audioProcessor.addParamEvent({ ParameterType::morphPos, normalizedMorphPos });
+	}
+
+	void setOscFreq(double oscFreq) {
+		audioProcessor.addParamEvent({ ParameterType::frequency, std::clamp(oscFreq, 1., sampleRate / 2.) });
+	}
+
+	void setOscGain(double gain) {
+		audioProcessor.addParamEvent({ ParameterType::gain, std::clamp(gain, 0., 1.) });
+	}
+
+	void setRampingStepsPerWavetable(int rampSteps) {
+		audioProcessor.addParamEvent({ ParameterType::rampSteps, static_cast<double>(std::clamp(rampSteps, 1, static_cast<int>(sampleRate))) });
+	}
+
 
 private:
 	void updateMorphedWaveform() {
