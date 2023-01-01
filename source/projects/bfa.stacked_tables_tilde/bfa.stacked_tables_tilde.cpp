@@ -96,7 +96,7 @@ public:
     
     //Attribute könnte man threadsafe=yes setzen und sich vrmtl. die Queue sparen
     attribute<double> oscillatorFreq {
-        this, "Osc Freq", 77.78, description{"Oscillator Frequency."}
+        this, "Osc Freq", 80., description{"Oscillator Frequency."}
     };
          
 
