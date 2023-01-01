@@ -67,7 +67,7 @@ std::optional<std::vector<double>> SamplePreprocessor::exportFrame(int targetTab
 	const std::vector<float> selectedSamples{ inputSamples.begin() + begin, inputSamples.begin() + end };
 	const float exportTableOscFreq = sampleRate / static_cast<float>(targetTablesize);
 
-	const Wavetable table{ selectedSamples, sampleRate / 2.f };
+	Wavetable table{ selectedSamples, sampleRate / 2.f };
 	//std::vector<Wavetable> wavetable{ table };
     std::span<Wavetable> wavetable{ &table, 1};
 	Osc interpolationOscillator{ wavetable, sampleRate, exportTableOscFreq };
