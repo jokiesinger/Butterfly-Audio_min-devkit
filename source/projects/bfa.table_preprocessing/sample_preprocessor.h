@@ -8,6 +8,8 @@
 #pragma once
 
 #include <chrono>
+#include <optional>
+#include <span>
 #include "painter.h"
 #include "event.h"
 #include "graphics_transform.h"
