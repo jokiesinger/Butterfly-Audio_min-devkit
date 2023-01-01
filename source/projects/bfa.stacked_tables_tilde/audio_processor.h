@@ -6,78 +6,84 @@
 namespace Butterfly {
 
 enum class ParameterType {
-    gain, frequency, morphPos, sampleRate, rampSteps
+	gain,
+	frequency,
+	morphPos,
+	sampleRate,
+	rampSteps
 };
 
-struct Event {
-    ParameterType parameterType;
-    double value{};
+struct Event
+{
+	ParameterType parameterType{};
+	double value{};
 };
 
 
 template<typename It>
 constexpr auto make_span(It begin, It end) {
-    return std::span<std::remove_pointer_t<typename std::iterator_traits<It>::pointer>>(&(*begin), std::distance(begin, end));
+	return std::span<std::remove_pointer_t<typename std::iterator_traits<It>::pointer>>(&(*begin), std::distance(begin, end));
 }
 
-class AudioProcessor {
-    using Multitable = std::vector<Wavetable<float>>;
-    using MultitableCollection = std::vector<Multitable>;
-    using State = MultitableCollection;
-    
+class AudioProcessor
+{
+	using Multitable = std::vector<Wavetable<float>>;
+	using MultitableCollection = std::vector<Multitable>;
+	using State = MultitableCollection;
+
 public:
-    void init(double oscFreq, double sampleRate, int maxFrames, double gain = 1.) {
-        setSampleRate(sampleRate);
-        frequency.set(oscFreq);
-        osc.setMaxNumWaveforms(maxFrames);
-        waveforms.reserve(maxFrames);
-        this->gain.set(gain);
-    }
-    
-    //=====================================
-    //                UI
-    //=====================================
-    // UI thread only!
-    void changeState(State&& newState) {
-        auto newSharedState = std::make_shared<State>(newState);
-        releasePool.add(newSharedState);
-        std::atomic_store(&currentState, newSharedState);
-        releasePool.clearUnused();
-    }
-    // UI thread only!
-    void addParamEvent(Event event) {
-        eventQueue.enqueue(event);
-    }
-    
-    //=====================================
-    //               AUDIO
-    //=====================================
-    
-    // Audio thread
-    void process(c74::min::audio_bundle &buffer) {
-        auto newState = std::atomic_load(&currentState);
-        if (previousState != newState.get()) {
-            previousState = newState.get();
-            waveforms.clear();
-            assert(waveforms.capacity() >= newState->size());
-            for (const auto &multitable : *newState) {
-                waveforms.push_back(make_span(multitable.begin(), multitable.end()));
-            }
-            osc.setWaveforms(waveforms);
-        }
-        Event event;    //Allocation in process function? -> I would go with atomic<double> value.store() & value.load()
-        while (eventQueue.try_dequeue(event)) {
-            processEvent(event);
-        }
-        
-        for (auto i = 0; i < buffer.frame_count(); ++i) {
-            buffer.samples(0)[i] = ++osc * ++gain;
-            frequency++;
-        }
-    }
-    
+	void init(double oscFreq, double sampleRate, int maxFrames, double gain = 1.) {
+		setSampleRate(sampleRate);
+		frequency.set(oscFreq);
+		osc.setMaxNumWaveforms(maxFrames);
+		waveforms.reserve(maxFrames);
+		this->gain.set(gain);
+	}
+
+	//=====================================
+	//                UI
+	//=====================================
+	// UI thread only!
+	void changeState(State&& newState) {
+		auto newSharedState = std::make_shared<State>(newState);
+		releasePool.add(newSharedState);
+		std::atomic_store(&currentState, newSharedState);
+		releasePool.clearUnused();
+	}
+	// UI thread only!
+	void addParamEvent(Event event) {
+		eventQueue.enqueue(event);
+	}
+
+	//=====================================
+	//               AUDIO
+	//=====================================
+
+	// Audio thread
+	void process(c74::min::audio_bundle& buffer) {
+		auto newState = std::atomic_load(&currentState);
+		if (previousState != newState.get()) {
+			previousState = newState.get();
+			waveforms.clear();
+			assert(waveforms.capacity() >= newState->size());
+			for (const auto& multitable : *newState) {
+				waveforms.push_back(make_span(multitable.begin(), multitable.end()));
+			}
+			osc.setWaveforms(waveforms);
+		}
+		Event event; //Allocation in process function? -> I would go with atomic<double> value.store() & value.load()
+		while (eventQueue.try_dequeue(event)) {
+			processEvent(event);
+		}
+
+		for (auto i = 0; i < buffer.frame_count(); ++i) {
+			buffer.samples(0)[i] = ++osc * ++gain;
+			frequency++;
+		}
+	}
+
 private:
-    
+
     void processEvent(const Event& event) {
         switch (event.parameterType) {
             case ParameterType::gain:

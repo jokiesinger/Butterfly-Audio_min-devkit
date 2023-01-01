@@ -5,7 +5,8 @@
 
 #include "c74_min.h"
 #include "sample_preprocessor.h"
-#include "sample_preprocessor.cpp" // cannot include c74_min.h in more than one translation unit
+#include "min_painter.h"
+#include "min_event_wrapper.h"
 
 
 using namespace c74::min;
@@ -14,7 +15,7 @@ using namespace Butterfly;
 
 
 
-
+/*
 void fillRect(target& t, const Rect& r, const color& c) {
 	rect<fill> rect{ t, color{ c }, position{ r.x, r.y }, size{ r.width, r.height } };
 }
@@ -30,7 +31,7 @@ void drawLine(target& t, const Point& p1, const Point& p2, const color& c, doubl
 void drawPoint(target& t, const Point& p1, const color& c, double siz = 1.0) {
 	ellipse<fill> line{ t, color{ c }, position{ p1.x - siz * .5, p1.y - siz * .5 }, size{ siz, siz } };
 }
-
+*/
 
 
 class table_preprocessing : public object<table_preprocessing>, public ui_operator<160, 80>, public Callback

@@ -8,8 +8,8 @@
 #pragma once
 
 #include <chrono>
-#include "min_painter.h"
-#include "min_event_wrapper.h"
+#include "painter.h"
+#include "event.h"
 #include "graphics_transform.h"
 #include "wavetable_oscillator.h"
 
@@ -68,7 +68,7 @@ public:
 	void setModeImpl(Mode newMode);
 	void setSampleData(const std::vector<float>& data);
 
-	void draw(MaxPainter& painter, const DrawAttributes& drawAttributes);
+	void draw(Painter& painter, const DrawAttributes& drawAttributes);
 
 	void mousedownImpl(const MouseEvent& e);
 	void mousedragImpl(const MouseEvent& e);
@@ -84,10 +84,10 @@ private:
 
 	// Drawing
 	void redraw() { callback.doRedraw(); }
-	void drawSamples(MaxPainter& painter);
-	void drawDraggingRect(MaxPainter& painter);
-	void drawZeroCrossings(MaxPainter& painter);
-	void drawOverlayRects(MaxPainter& painter);
+	void drawSamples(Painter& painter);
+	void drawDraggingRect(Painter& painter);
+	void drawZeroCrossings(Painter& painter);
+	void drawOverlayRects(Painter& painter);
 	void targetResized(double width, double height); // Called when the target has been resized through any means
 	void resetTransform();
 	void constrainViewTransform();

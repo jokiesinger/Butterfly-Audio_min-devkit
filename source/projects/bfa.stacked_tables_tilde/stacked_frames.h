@@ -7,15 +7,16 @@
 #include "release_pool.h"
 #include "audio_processor.h"
 
-inline constexpr float minusOneDb = 0.891251;   //-1dB
+inline constexpr float minusOneDb = 0.891251; //-1dB
 
 namespace Butterfly {
 
-struct Frame {
-    using Wavetable = Butterfly::Wavetable<float>;
-    
-    std::vector<float>     samples;       // raw data
-    std::vector<Wavetable> multitable;    // antialiased data
+struct Frame
+{
+	using Wavetable = Butterfly::Wavetable<float>;
+
+	std::vector<float> samples;		   // raw data
+	std::vector<Wavetable> multitable; // antialiased data
 };
 
 /// @brief …
@@ -23,44 +24,45 @@ struct Frame {
 /// @param numTables
 /// @return …
 std::pair<int, double> computeMorphingStuff(float normalizedMorphingPos, int numTables) {
-    float scaledPos               = normalizedMorphingPos * static_cast<float>(numTables - 1);
-    auto  targetFirstTable        = std::min<int>(static_cast<int>(scaledPos), numTables - 2);
-    auto targetFractionalMorphingParam = scaledPos - targetFirstTable;
-    return {targetFirstTable, targetFractionalMorphingParam};
+	float scaledPos = normalizedMorphingPos * static_cast<float>(numTables - 1);
+	auto targetFirstTable = std::min<int>(static_cast<int>(scaledPos), numTables - 2);
+	auto targetFractionalMorphingParam = scaledPos - targetFirstTable;
+	return { targetFirstTable, targetFractionalMorphingParam };
 }
 
 // Frame factory function
 template<int internalTablesize>
 Frame createFrame(const std::vector<float>& data, float sampleRate, const std::vector<float>& splitFreqs,
-                  const Butterfly::FFTCalculator<float, internalTablesize>& fftCalculator) {
-    Frame frame;
-    frame.samples    = data;
-    frame.multitable.resize(splitFreqs.size());
-    Butterfly::Antialiaser antialiaser {sampleRate, fftCalculator};
-    antialiaser.antialiase(data.begin(), splitFreqs.begin(), splitFreqs.end(), frame.multitable);
-    return frame;
+	const Butterfly::FFTCalculator<float, internalTablesize>& fftCalculator) {
+	Frame frame;
+	frame.samples = data;
+	frame.multitable.resize(splitFreqs.size());
+	Butterfly::Antialiaser antialiaser{ sampleRate, fftCalculator };
+	antialiaser.antialiase(data.begin(), splitFreqs.begin(), splitFreqs.end(), frame.multitable);
+	return frame;
 }
 
 //Make highestSplitFreq sampleRate dependent? All frames would've to be recalculated after sampleRate change...
 std::vector<float> calculateSplitFreqs(float semitones = 2.f, float highestSplitFreq = 22050.f, float lowestSplitFreq = 5.f) {
-    std::vector<float> splitFreqs;
-    float       currentFreq = highestSplitFreq;
-    const float factor      = 1 / pow(2.f, (semitones / 12.f));
-    while (currentFreq > lowestSplitFreq) {
-        splitFreqs.push_back(currentFreq);
-        currentFreq = currentFreq * factor;
-    }
-    std::reverse(splitFreqs.begin(), splitFreqs.end());
-    return splitFreqs;
+	std::vector<float> splitFreqs;
+	float currentFreq = highestSplitFreq;
+	const float factor = 1 / pow(2.f, (semitones / 12.f));
+	while (currentFreq > lowestSplitFreq) {
+		splitFreqs.push_back(currentFreq);
+		currentFreq = currentFreq * factor;
+	}
+	std::reverse(splitFreqs.begin(), splitFreqs.end());
+	return splitFreqs;
 }
 
-class StackedFrames {
-    using Multitable = std::vector<Wavetable<float>>;
-    using MultitableCollection = std::vector<Multitable>;
-    using State = MultitableCollection;
-    using Wavetable = Butterfly::Wavetable<float>;
-    using Osc       = Butterfly::WavetableOscillator<Wavetable>;
-    
+class StackedFrames
+{
+	using Multitable = std::vector<Wavetable<float>>;
+	using MultitableCollection = std::vector<Multitable>;
+	using State = MultitableCollection;
+	using Wavetable = Butterfly::Wavetable<float>;
+	using Osc = Butterfly::WavetableOscillator<Wavetable>;
+
 public:
     //Ist es in Ordnung nur diesen Konstruktor zu implementieren?
 	StackedFrames(float sampleRate, int internalTablesize, float oscFreq, int maxFrames) : 
@@ -221,18 +223,18 @@ public:
         audioProcessor.addParamEvent({ParameterType::rampSteps, static_cast<double>(std::clamp(rampSteps, 1, static_cast<int>(sampleRate)))});
     }
     
+
 private:
-    
-    void updateMorphedWaveform() {
-        if (frames.size() < 2) { return; }
-        const auto [currentFirstTable, fracMorphPos] = computeMorphingStuff(normalizedMorphPos, frames.size());    //structured binding
-        const auto& firstFrame  = frames[currentFirstTable];
-        const auto& secondFrame = frames[currentFirstTable + 1];
-        for (size_t i = 0; i < morphedWaveform.size(); i++) {
-            morphedWaveform[i] = firstFrame.samples[i] * (1.f - fracMorphPos) + secondFrame.samples[i] * fracMorphPos;
-        }
-    }
-    /*
+	void updateMorphedWaveform() {
+		if (frames.size() < 2) { return; }
+		const auto [currentFirstTable, fracMorphPos] = computeMorphingStuff(normalizedMorphPos, frames.size()); //structured binding
+		const auto& firstFrame = frames[currentFirstTable];
+		const auto& secondFrame = frames[currentFirstTable + 1];
+		for (size_t i = 0; i < morphedWaveform.size(); i++) {
+			morphedWaveform[i] = firstFrame.samples[i] * (1.f - fracMorphPos) + secondFrame.samples[i] * fracMorphPos;
+		}
+	}
+	/*
     void normalizedMorphPosChanged() {
         auto result = computeMorphingStuff(normalizedMorphPos, frames.size());
         currentFirstTable = result.first;
@@ -240,29 +242,29 @@ private:
         updateMorphedWaveform();
     }
     */
-    void sendFramesToAudioProcessor() {
-        State state;
-        for (const auto &frame : frames) {
-            state.push_back(frame.multitable);
-        }
-        audioProcessor.changeState(std::move(state));
-    }
-    
-    void framesChanged() {
-        updateMorphedWaveform();
-        sendFramesToAudioProcessor();
-    }
-    
-    ItemCollection<Frame> frames;
-    size_t maxFrames{}, internalTablesize{};
-    std::vector<float> morphedWaveform;
-    //int currentFirstTable{};
-    //float fracMorphPos{};
-    float normalizedMorphPos{};
-    float sampleRate{};
-    ReleasePool<MultitableCollection> releasePool;
-    
-    AudioProcessor audioProcessor;
+	void sendFramesToAudioProcessor() {
+		State state;
+		for (const auto& frame : frames) {
+			state.push_back(frame.multitable);
+		}
+		audioProcessor.changeState(std::move(state));
+	}
+
+	void framesChanged() {
+		updateMorphedWaveform();
+		sendFramesToAudioProcessor();
+	}
+
+	ItemCollection<Frame> frames;
+	size_t maxFrames{}, internalTablesize{};
+	std::vector<float> morphedWaveform;
+	//int currentFirstTable{};
+	//float fracMorphPos{};
+	float normalizedMorphPos{};
+	float sampleRate{};
+	ReleasePool<MultitableCollection> releasePool;
+
+	AudioProcessor audioProcessor;
 };
 
 }

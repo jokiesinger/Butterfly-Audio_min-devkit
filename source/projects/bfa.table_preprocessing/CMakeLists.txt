@@ -19,6 +19,7 @@ include_directories(
 
 set( SOURCE_FILES
 	${PROJECT_NAME}.cpp
+	sample_preprocessor.cpp
 	sample_preprocessor.h
 	graphics_transform.h
 )
