@@ -9,7 +9,8 @@ enum class ParameterType {
 	gain,
 	frequency,
 	morphPos,
-	sampleRate
+	sampleRate,
+	rampSteps
 };
 
 struct Event
@@ -82,47 +83,55 @@ public:
 	}
 
 private:
-	void processEvent(const Event& event) {
-		switch (event.parameterType) {
-		case ParameterType::gain:
-			setGain(event.value);
-			break;
-		case ParameterType::frequency:
-			setFrequency(event.value);
-			break;
-		case ParameterType::morphPos:
-			setMorphPos(event.value);
-			break;
-		case ParameterType::sampleRate:
-			setSampleRate(event.value);
-			break;
-		}
-	}
 
-	void setGain(double gain) {
-		this->gain.set(gain);
-	}
+    void processEvent(const Event& event) {
+        switch (event.parameterType) {
+            case ParameterType::gain:
+                setGain(event.value);
+                break;
+            case ParameterType::frequency:
+                setFrequency(event.value);
+                break;
+            case ParameterType::morphPos:
+                setMorphPos(event.value);
+                break;
+            case ParameterType::sampleRate:
+                setSampleRate(event.value);
+                break;
+            case ParameterType::rampSteps:
+                setRampSteps(event.value);
+                break;
+        }
+    }
+    
+    void setGain(double gain) {
+        this->gain.set(gain);
+    }
 
-	void setFrequency(double frequency) {
-		this->frequency.set(frequency);
-		osc.setFrequency(frequency);
-	}
+    void setFrequency(double frequency) {
+        this->frequency.set(frequency);
+        osc.setFrequency(frequency);
+    }
+    
+    void setMorphPos(double morphPos) {
+        osc.setNormalizedMorphingParam(morphPos);
+    }
+    
+    void setSampleRate(double sampleRate) {
+        osc.setSampleRate(sampleRate);
+    }
+    
+    void setRampSteps(double rampSteps) {
+        osc.setRampingStepsPerWavetable(static_cast<int>(rampSteps));
+    }
 
-	void setMorphPos(double morphPos) {
-		osc.setNormalizedMorphingParam(morphPos);
-	}
-
-	void setSampleRate(double sampleRate) {
-		osc.setSampleRate(sampleRate);
-	}
-
-
-	MorphingWavetableOscillator<WavetableOscillator<Wavetable<float>>> osc;
-	std::vector<std::span<const Wavetable<float>>> waveforms;
-	RampedValue<double> gain{ 1. }, frequency{ 10. }; //Probably not needed
-	std::shared_ptr<State> currentState{};
-	State* previousState{};
-	ReleasePool<MultitableCollection> releasePool;
-	c74::min::fifo<Event> eventQueue{ 16 };
+    
+    MorphingWavetableOscillator<WavetableOscillator<Wavetable<float>>> osc;
+    std::vector<std::span<const Wavetable<float>>> waveforms;
+    RampedValue<double> gain{1.}, frequency{10.};       //Probably not needed
+    std::shared_ptr<State> currentState{};
+    State* previousState{};
+    ReleasePool<MultitableCollection> releasePool;
+    c74::min::fifo<Event> eventQueue{16};
 };
 }
