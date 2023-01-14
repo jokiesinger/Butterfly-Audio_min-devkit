@@ -69,7 +69,12 @@ public:
     attribute<color> selection_color {this, "Selection Color", {.8f, .8f, .8f, .8f}};
     attribute<color> morphed_frame_color {this, "Morphed Frame Color", {1.f, 1.f, 1.f, 1.f}};
     attribute<bool> use_fat_lines_for_selection {this, "Draw selected waveforms fat", false};
-    attribute<int> rampSteps {this, "Ramp steps per wavetable", 15000};
+    attribute<int> rampSteps {this, "Ramp steps per wavetable", 150,
+        setter { MIN_FUNCTION {
+            stackedFrames.setRampingStepsPerWavetable(args[0]);
+            return args;
+        }}
+    };
     
     attribute<int, threadsafe::no, limit::clamp> m_channel {
         this, "Channel", 1,
@@ -91,13 +96,14 @@ public:
     
     //Attribute könnte man threadsafe=yes setzen und sich vrmtl. die Queue sparen
     attribute<double> oscillatorFreq {
-        this, "Osc Freq", 77.78, description{"Oscillator Frequency."}
+        this, "Osc Freq", 80., description{"Oscillator Frequency."}
     };
          
 
     stacked_tables_tilde(const atoms& args = {}) : ui_operator::ui_operator {this, args}, stackedFrames{sampleRate, internalTablesize, static_cast<float>(oscillatorFreq.get()), maxFrames} {
         splitFreqs = Butterfly::calculateSplitFreqs(2.f, sampleRate / 2.f, 5.f);
         nIntervalls = splitFreqs.size();
+        stackedFrames.setRampingStepsPerWavetable(rampSteps.get());
     }
     
     message<> dspsetup {

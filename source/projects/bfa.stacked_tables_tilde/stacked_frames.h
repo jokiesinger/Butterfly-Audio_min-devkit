@@ -218,6 +218,11 @@ public:
 		audioProcessor.addParamEvent({ ParameterType::gain, std::clamp(gain, 0., 1.) });
 	}
 
+	void setRampingStepsPerWavetable(int rampSteps) {
+		audioProcessor.addParamEvent({ ParameterType::rampSteps, static_cast<double>(std::clamp(rampSteps, 1, static_cast<int>(sampleRate))) });
+	}
+
+
 private:
 	void updateMorphedWaveform() {
 		if (frames.size() < 2) { return; }
